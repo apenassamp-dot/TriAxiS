@@ -79,8 +79,21 @@
   }
 
   async function signUp({ email, password, displayName, phone }) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const emailParts = normalizedEmail.split('@');
+    if (
+      !normalizedEmail ||
+      normalizedEmail.length > 254 ||
+      /\s/.test(normalizedEmail) ||
+      emailParts.length !== 2 ||
+      !emailParts[0] ||
+      !emailParts[1]?.includes('.') ||
+      emailParts[1].startsWith('.') ||
+      emailParts[1].endsWith('.')
+    ) throw new Error('INVALID_SIGNUP_EMAIL');
+
     const { data, error } = await requireClient().auth.signUp({
-      email: String(email || '').trim().toLowerCase(),
+      email: normalizedEmail,
       password: String(password || ''),
       options: {
         data: {
@@ -110,4 +123,3 @@
     isStaff: () => currentState.roles.some((role) => ['admin', 'production', 'support'].includes(role))
   });
 })();
-

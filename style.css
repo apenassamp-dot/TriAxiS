@@ -5260,6 +5260,14 @@ body.sidebar-hidden .profile-login-node .login-access-widget{
   border-top: 1px solid var(--c-red);
   pointer-events: none;
 }
+.login-field-card--required{
+  border-color: rgba(232,0,28,.58);
+  box-shadow: inset 3px 0 0 var(--c-red);
+}
+.login-field-card--required .login-field-head label::after{
+  content: ' *';
+  color: var(--c-red);
+}
 .login-section-title.login-field-card{
   margin-bottom: 9px;
 }

@@ -439,14 +439,11 @@
 
   /* ── Cadastro ─────────────────────────────────────────────────────── */
   function openAddProfileModal() {
-    if (!currentTag) return;
-    document.getElementById('formAddProfile').reset();
-    setText('formError', '');
-    setText('formTagValue', currentTag);
-    resetPhotoPreview();
-    tempPhotoBase64 = null;
-    openModal('modalAddProfile');
-    setTimeout(() => document.getElementById('inputName').focus(), 100);
+    closeAllModals();
+    switchView('profile');
+    openLoginPanel();
+    setLoginMode('create');
+    showToast('INFORME SEU E-MAIL PARA CRIAR A CONTA');
   }
 
   function resetPhotoPreview() {
@@ -1560,9 +1557,10 @@
     enterTab?.setAttribute('aria-selected', String(!creating));
     createTab?.setAttribute('aria-selected', String(creating));
     if (creating) {
+      if (createForm) createForm.scrollTop = 0;
       updateCreateIdPasswordRules();
-      setCreateLoginStatus('Preencha nome, e-mail, senha e telefone para criar o acesso.');
-      setTimeout(() => document.getElementById('createLoginNameInput')?.focus(), 80);
+      setCreateLoginStatus('Preencha e-mail, nome, senha e telefone para criar o acesso.');
+      setTimeout(() => document.getElementById('createLoginEmailInput')?.focus(), 80);
     } else {
       updateLoginRules();
       setLoginStatus('Aguardando credenciais.');
@@ -1613,16 +1611,16 @@
     const phone = (phoneInput?.value || '').trim();
     const passCheck = updateCreateIdPasswordRules();
 
+    if (!isValidSignupEmail(email) || !emailInput?.checkValidity()) {
+      setCreateLoginStatus('INFORME UM E-MAIL VÁLIDO.', 'error');
+      showToast('E-MAIL INVÁLIDO', 'error');
+      emailInput?.focus();
+      return;
+    }
     if (!name) {
       setCreateLoginStatus('INFORME O NOME DO AGENTE PARA CRIAR O ID.', 'error');
       showToast('NOME OBRIGATÓRIO PARA CRIAR ID', 'error');
       nameInput?.focus();
-      return;
-    }
-    if (!email || !emailInput?.checkValidity()) {
-      setCreateLoginStatus('INFORME UM E-MAIL VÁLIDO.', 'error');
-      showToast('E-MAIL INVÁLIDO', 'error');
-      emailInput?.focus();
       return;
     }
     if (!passCheck.valid) {
@@ -1676,6 +1674,14 @@
     }
   }
 
+  function isValidSignupEmail(email) {
+    const value = String(email || '').trim();
+    if (!value || value.length > 254 || /\s/.test(value)) return false;
+    const parts = value.split('@');
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
+    return parts[1].includes('.') && !parts[1].startsWith('.') && !parts[1].endsWith('.');
+  }
+
   function renderLoginState() {
     const agent = getLoggedAgent();
     const widget = document.getElementById('loginAccessWidget');
@@ -1696,7 +1702,7 @@
     if (tag) tag.textContent = agent ? `${agent.tag} · ${agent.level || 'LVL-02'} · ${agent.status || 'Autorizado'}` : '#-----';
     if (loginButtonText) loginButtonText.textContent = agent ? 'LOGADO' : 'FAZER LOGIN';
     renderUserProfile();
-    if (!agent && !createForm?.hidden) setCreateLoginStatus('Preencha nome, e-mail, senha e telefone para criar o acesso.');
+    if (!agent && !createForm?.hidden) setCreateLoginStatus('Preencha e-mail, nome, senha e telefone para criar o acesso.');
     if (!agent && !form?.hidden) setLoginStatus('Aguardando credenciais.');
   }
 
