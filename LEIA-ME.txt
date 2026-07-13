@@ -1,0 +1,34 @@
+TRIAXIS NEXUS V4
+=================
+
+COMO ABRIR
+1. Extraia a pasta completa do arquivo ZIP.
+2. Execute INICIAR_TRIAXIS_NEXUS_V4.bat ou abra index.html no navegador.
+3. Não abra o HTML diretamente de dentro do ZIP.
+
+NOVIDADE PRINCIPAL — GESTÃO COMPLETA DO CATÁLOGO
+No modo ADMIN, abra CATÁLOGO e selecione a aba GESTÃO DO CATÁLOGO.
+
+O painel permite:
+- criar, editar, duplicar, ocultar e remover produtos;
+- alterar preço, prazo, descrição, categoria, status e personalização;
+- carregar imagem principal e galeria pelo próprio site;
+- definir o anúncio em destaque;
+- alterar prioridade por setas ou arrastar e soltar;
+- configurar colunas, densidade, formato das imagens, alinhamento e espaçamento;
+- ocultar ou exibir campos da vitrine;
+- exportar, importar e restaurar o catálogo.
+
+PERSISTÊNCIA
+Os dados continuam sendo armazenados no navegador por localStorage. O backup completo da Nexus V4 inclui agentes, pedidos, catálogo, layout e configurações. Imagens enviadas pelo painel são otimizadas e salvas localmente; o limite depende do armazenamento do navegador.
+
+ARQUIVOS
+- index.html: estrutura do sistema
+- style.css: identidade visual e interfaces
+- script.js: funções, banco local e painel administrativo
+- assets/: imagens utilizadas pelo projeto
+
+INTEGRIDADE V4
+- QR Code incluído localmente em assets/qrcode.min.js; não depende de CDN.
+- O arquivo MANIFESTO_SHA256.txt contém os hashes dos arquivos do pacote.
+- O sistema foi testado em navegador com criação e remoção de produto, alteração de layout, modo cliente e geração de QR.

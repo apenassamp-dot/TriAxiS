@@ -1,0 +1,37 @@
+TRIAXIS NEXUS V4 — ALTERAÇÕES
+================================
+
+NOVO PAINEL ADMINISTRATIVO DO CATÁLOGO
+- Aba “Gestão do Catálogo” visível apenas no modo Admin.
+- Criação, edição, duplicação, ocultação, publicação e remoção de produtos.
+- Alteração de nome, ID interno, linha, tipo, categoria, disponibilidade, preço e prazo.
+- Edição de descrição, personalização, medidas, especificações, materiais e usos.
+- Upload de imagem principal e galeria diretamente pelo navegador.
+- Imagens enviadas são redimensionadas e comprimidas automaticamente.
+- Seleção do anúncio principal em destaque.
+- Selo promocional, texto do botão, estilo do card, cor de destaque e ajuste de imagem.
+- Alteração de prioridade por setas ou arrastar e soltar.
+- Busca e filtros dentro do painel administrativo.
+
+FORMATAÇÃO COMPLETA DA VITRINE
+- Título e subtítulo editáveis.
+- 2, 3, 4 colunas ou grade automática.
+- Cards detalhados, compactos ou minimalistas.
+- Imagens em paisagem, quadrado ou retrato.
+- Alinhamento esquerdo ou centralizado.
+- Espaçamento compacto, normal ou amplo.
+- Ordenação manual, alfabética ou por preço.
+- Controle de exibição do destaque, categoria, especificações, validação e disponibilidade.
+- Texto superior e chamada promocional do destaque editáveis.
+
+DADOS E SEGURANÇA LOCAL
+- Catálogo e layout persistidos no navegador.
+- Exportação e importação exclusiva do catálogo.
+- Backup geral V4 inclui agentes, pedidos, catálogo, layout e configurações.
+- Restauração do catálogo padrão com confirmação dupla.
+- QR Code agora incluído localmente para funcionamento sem internet.
+
+COMPATIBILIDADE
+- Funções anteriores da Nexus V3 preservadas.
+- Produtos existentes migrados automaticamente para o novo sistema.
+- Modo Cliente não exibe ferramentas administrativas.

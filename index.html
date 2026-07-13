@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TriAxis Nexus V4</title>
+<meta name="description" content="Sistema de geração e identificação de agentes TriAxis CyberShape">
+
+<!-- Google Fonts: tipografia mais quadrada/futurista para a estética TriAxis -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Oxanium:wght@400;500;600;700;800&family=Share+Tech+Mono&family=Audiowide&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700;800;900&family=Oxanium:wght@400;500;600;700;800&family=Share+Tech+Mono&family=Audiowide&display=swap" rel="stylesheet"></noscript>
+
+<link rel="icon" type="image/png" href="assets/mini-logo.png">
+<link rel="apple-touch-icon" href="assets/mini-logo.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     OVERLAYS GLOBAIS — scanlines + textura de ruído (efeito CRT/HUD)
+════════════════════════════════════════════════════════════════ -->
+<div class="scanline-overlay" aria-hidden="true"></div>
+<div class="noise-overlay" aria-hidden="true"></div>
+<div class="vignette-overlay" aria-hidden="true"></div>
+
+<div class="app-shell">
+
+  <!-- ══════════════════════════════════════════════════════════
+       SIDEBAR FIXA
+  ══════════════════════════════════════════════════════════ -->
+  <aside class="sidebar">
+
+    <div class="sidebar-brand">
+      <!-- Mini logo TriAxis salva em assets/mini-logo.png -->
+      <img class="brand-logo" src="assets/mini-logo.png" alt="Mini logo padrão TriAxis" loading="eager">
+      <div class="brand-text">
+        <span class="brand-name">TRIAXIS</span>
+        <span class="brand-sub">CYBERSHAPE</span>
+      </div>
+      <button id="btnToggleSidebar" class="sidebar-toggle" type="button" aria-label="Esconder barra lateral">⇤</button>
+    </div>
+
+    <div class="sidebar-tagline">
+      <span>識別コード生成システム</span>
+      <small>SISTEMA DE IDENTIFICAÇÃO DE AGENTES</small>
+    </div>
+
+    <div class="sidebar-quick-search">
+      <label for="sidebarSearchInput">LOCALIZAR AGENTE</label>
+      <div class="sidebar-search-row">
+        <input id="sidebarSearchInput" type="text" placeholder="#XXXXX / NOME" autocomplete="off" spellcheck="false">
+        <button id="btnSidebarSearch" type="button" aria-label="Buscar agente">⌕</button>
+      </div>
+      <div id="sidebarSearchStatus" class="sidebar-search-status">NODE READY</div>
+    </div>
+
+    <nav class="sidebar-nav" id="sidebarNav">
+      <button class="nav-item active" data-view="home" type="button">
+        <span class="nav-icon">⌂</span>
+        <span class="nav-label">HOME</span>
+      </button>
+      <button class="nav-item" data-view="profile" type="button">
+        <span class="nav-icon">◉</span>
+        <span class="nav-label">MEU PERFIL</span>
+      </button>
+      <button class="nav-item" data-view="bank" type="button">
+        <span class="nav-icon">▤</span>
+        <span class="nav-label">BANCO DE AGENTES</span>
+      </button>
+      <button class="nav-item" data-view="search" type="button">
+        <span class="nav-icon">⌕</span>
+        <span class="nav-label">BUSCAR AGENTE</span>
+      </button>
+      <button class="nav-item" data-view="physical" type="button">
+        <span class="nav-icon">▣</span>
+        <span class="nav-label">ID FÍSICO</span>
+      </button>
+      <button class="nav-item" data-view="catalog" type="button">
+        <span class="nav-icon">◫</span>
+        <span class="nav-label">CATÁLOGO</span>
+      </button>
+      <button class="nav-item" data-view="production" type="button">
+        <span class="nav-icon">▦</span>
+        <span class="nav-label">PRODUÇÃO</span>
+      </button>
+
+      <button class="nav-item" data-view="quote" type="button">
+        <span class="nav-icon">▧</span>
+        <span class="nav-label">ORÇAMENTO</span>
+      </button>
+      <button class="nav-item" data-view="verify" type="button">
+        <span class="nav-icon">◎</span>
+        <span class="nav-label">VERIFICAR QR</span>
+      </button>
+      <button class="nav-item" data-view="lab" type="button">
+        <span class="nav-icon">⌬</span>
+        <span class="nav-label">LAB TRIAXIS</span>
+      </button>
+      <button class="nav-item" data-view="settings" type="button">
+        <span class="nav-icon">⚙</span>
+        <span class="nav-label">CONFIGURAÇÕES</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sys-status">
+        <span class="status-dot" aria-hidden="true"></span>
+        SYS ACTIVE
+      </div>
+      <div class="sidebar-version">TX-NXS // V4</div>
+    </div>
+
+  </aside>
+
+  <button id="btnShowSidebar" class="sidebar-reveal" type="button" aria-label="Mostrar barra lateral">☰</button>
+
+
+
+
+  <button id="btnTestMode" class="test-mode-toggle" type="button" aria-label="Alternar entre modo admin e modo cliente">
+    <span class="test-mode-toggle__label">SIMULAÇÃO</span>
+    <strong id="testModeLabel">ADMIN</strong>
+  </button>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PAINEL PRINCIPAL
+  ══════════════════════════════════════════════════════════ -->
+  <main class="main-panel">
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: HOME / TRIAXIS NEXUS
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-home" class="view active home-view">
+      <div class="nexus-home-shell hud-frame">
+        <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+        <div class="nexus-home-bg" aria-hidden="true"></div>
+
+        <div class="nexus-home-content">
+          <p class="nexus-kicker">// TRIAXIS INTERNAL SYSTEM</p>
+          <div class="nexus-logo-home" aria-label="TriAxiS Nexus">
+            <img src="assets/triaxis-nexus-home-logo.png" alt="TriAxiS Nexus" class="nexus-logo-home-img" loading="eager">
+          </div>
+          <p class="nexus-brand-slogan">Ideias digitais. Forma física.</p>
+          <p class="nexus-subtitle">Agent Registry · Product Catalog · Fabrication Queue</p>
+
+          <div class="nexus-quick-actions">
+            <button class="btn btn-primary" data-home-go="catalog" type="button">
+              <span class="btn-icon">◫</span> ACESSAR PRODUTOS
+            </button>
+            <button class="btn btn-outline" data-home-go="physical" type="button">
+              <span class="btn-icon">▣</span> SOLICITAR ID FÍSICO
+            </button>
+            <button class="btn btn-outline" data-home-go="quote" type="button">
+              <span class="btn-icon">▧</span> ORÇAMENTO RÁPIDO
+            </button>
+          </div>
+        </div>
+
+        <div class="nexus-home-footer" aria-hidden="true">
+          <span>CYBERSHAPE NODE ONLINE</span>
+          <span>IDEIAS DIGITAIS. FORMA FÍSICA.</span>
+          <span>TRX-NXS // READY</span>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: PERFIL DO USUÁRIO
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-profile" class="view profile-view">
+      <header class="view-header">
+        <p class="eyebrow">// USER ACCESS NODE</p>
+        <h1 class="glitch-text" data-text="MEU PERFIL">MEU PERFIL</h1>
+        <p class="view-sub">Resumo do agente logado, pedidos vinculados e estado atual das solicitações.</p>
+      </header>
+
+      <!-- LOGIN LOCALIZADO EM MEU PERFIL -->
+      <div class="profile-login-node">
+        <div class="login-access-widget" id="loginAccessWidget">
+          <button id="btnLoginAccess" class="login-access-button" type="button" aria-label="Abrir login TriAxis" aria-expanded="false">
+            <span class="login-access-icon">◉</span>
+            <span class="login-access-text">FAZER LOGIN</span>
+          </button>
+
+          <div class="login-panel hud-frame login-panel--profile" id="loginPanel" aria-hidden="true">
+            <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+            <div class="login-panel-head">
+              <div>
+                <span>// ACCESS NODE</span>
+                <strong>LOGIN TRIAXIS</strong>
+              </div>
+              <button id="btnCloseLoginPanel" class="login-panel-close" type="button" aria-label="Fechar login">✕</button>
+            </div>
+
+            <div id="loginLoggedCard" class="login-logged-card" hidden>
+              <span>AGENTE LOGADO</span>
+              <strong id="loginLoggedName">—</strong>
+              <small id="loginLoggedTag">#-----</small>
+              <button id="btnOpenLoggedProfile" class="btn btn-primary btn-sm btn-block" type="button">ABRIR MEU PERFIL</button>
+              <button id="btnLogoutAccess" class="btn btn-outline btn-sm btn-block" type="button">SAIR DO LOGIN</button>
+            </div>
+
+            <div class="login-mode-tabs" role="tablist" aria-label="Modo de acesso TriAxis">
+              <button id="btnLoginModeEnter" class="login-mode-tab active" type="button" data-login-mode="enter" aria-selected="true">ENTRAR</button>
+              <button id="btnLoginModeCreate" class="login-mode-tab" type="button" data-login-mode="create" aria-selected="false">CRIAR ID</button>
+            </div>
+
+            <div class="login-scroll-controls" aria-label="Controle de rolagem do formulário de acesso">
+              <button class="login-scroll-btn" data-login-scroll="up" type="button">▲ SUBIR</button>
+              <button class="login-scroll-btn" data-login-scroll="down" type="button">DESCER ▼</button>
+            </div>
+
+            <form id="formTagLogin" class="tag-login-form auth-form-login login-scroll-page" novalidate>
+              <div class="login-section-title login-field-card login-field-card--intro">
+                <span>// ABA ENTRAR</span>
+                <strong>Acessar conta existente</strong>
+                <small>Fluxo curto para validar um ID TriAxis já criado.</small>
+              </div>
+
+              <div class="login-field-card">
+                <div class="login-field-head"><span>01</span><label for="loginTagInput">ID TRIAXIS</label></div>
+                <input id="loginTagInput" type="text" placeholder="#XXXXX" autocomplete="off" spellcheck="false" maxlength="6">
+              </div>
+
+              <div class="login-field-card">
+                <div class="login-field-head"><span>02</span><label for="loginPasswordInput">SENHA</label></div>
+                <input id="loginPasswordInput" type="password" placeholder="8 caracteres" autocomplete="current-password" maxlength="8">
+              </div>
+
+              <div class="login-field-card login-field-card--status">
+                <p id="loginStatusText" class="login-status-text">Aguardando credenciais.</p>
+              </div>
+
+              <div class="login-field-card login-field-card--action">
+                <button id="btnSubmitLogin" class="btn btn-primary btn-block" type="submit">VALIDAR ACESSO</button>
+              </div>
+            </form>
+
+            <form id="formCreateLoginId" class="tag-login-form auth-form-create login-scroll-page" novalidate hidden>
+              <div class="login-section-title login-field-card login-field-card--intro">
+                <span>// ABA CRIAR ID</span>
+                <strong>Criar novo acesso TriAxis</strong>
+                <small>Cada etapa fica separada para organizar o cadastro sem alterar a lógica.</small>
+              </div>
+
+              <div class="login-field-card">
+                <div class="login-field-head"><span>01</span><label for="createLoginNameInput">NOME OU APELIDO DO CLIENTE</label></div>
+                <input id="createLoginNameInput" type="text" placeholder="Ex: ApSamp" autocomplete="name" spellcheck="false" required>
+              </div>
+
+              <div class="login-field-card">
+                <div class="login-field-head"><span>02</span><label for="createLoginTagPreview">ID GERADO PELO SISTEMA</label></div>
+                <div class="generated-login-tag generated-login-tag--linked">
+                  <span>ID VINCULADO AO GERADOR TRIAXIS</span>
+                  <strong id="createLoginTagPreview">#-----</strong>
+                  <button id="btnRegenerateLoginTag" class="btn btn-outline btn-sm" type="button">GERAR NOVO ID</button>
+                </div>
+              </div>
+
+              <div class="login-field-card">
+                <div class="login-field-head"><span>03</span><label for="createLoginPasswordInput">SENHA DE ACESSO</label></div>
+                <input id="createLoginPasswordInput" type="password" placeholder="8 caracteres" autocomplete="new-password" maxlength="8">
+                <div class="login-rules">
+                  <span id="createRuleLen">8 caracteres</span>
+                  <span id="createRuleNums">4 números</span>
+                  <span id="createRuleSymbols">2 símbolos</span>
+                  <span id="createRuleLetters">1 maiúscula + 1 minúscula</span>
+                  <span id="createRuleSeq">sem sequência numérica</span>
+                </div>
+              </div>
+
+              <div class="login-field-card">
+                <div class="login-field-head"><span>04</span><label for="createLoginPhoneInput">NÚMERO DE TELEFONE</label></div>
+                <input id="createLoginPhoneInput" type="tel" placeholder="(00) 00000-0000" autocomplete="tel" required>
+              </div>
+
+              <div class="login-field-card login-field-card--status">
+                <p id="createLoginStatusText" class="login-status-text">Preencha os dados para criar um novo ID.</p>
+              </div>
+
+              <div class="login-field-card login-field-card--action">
+                <button id="btnCreateLoginId" class="btn btn-primary btn-block" type="submit">CRIAR ID TRIAXIS</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div id="profileContent" class="profile-content-zone"></div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: GERADOR
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-generator" class="view">
+
+      <header class="view-header">
+        <p class="eyebrow">// MÓDULO 01</p>
+        <h1 class="glitch-text" data-text="GERADOR DE TAGS">GERADOR DE TAGS</h1>
+        <p class="view-sub">Identificador único de 5 caracteres para agentes TriAxis CyberShape</p>
+      </header>
+
+      <!-- Painel do gerador -->
+      <div class="generator-card hud-frame">
+        <span class="hud-corner tl"></span>
+        <span class="hud-corner tr"></span>
+        <span class="hud-corner bl"></span>
+        <span class="hud-corner br"></span>
+
+        <div class="generator-label">TAG GERADA</div>
+
+        <div class="tag-display" id="tagDisplay">
+          <span id="tagText">#-----</span>
+        </div>
+
+        <div class="tag-meta" id="tagMeta">ID TEMPORÁRIO · NÃO SALVO NO BANCO</div>
+      </div>
+
+      <div class="generator-actions">
+        <button id="btnGenerate" class="btn btn-outline" type="button">
+          <span class="btn-icon">↻</span> GERAR NOVA TAG
+        </button>
+        <button id="btnAddProfile" class="btn btn-primary" type="button">
+          <span class="btn-icon">+</span> ADICIONAR A PERFIL
+        </button>
+      </div>
+
+      <div class="dashboard-strip">
+        <div class="dash-item"><span>AGENTES</span><strong id="dashTotal">0</strong></div>
+        <div class="dash-item"><span>ATIVOS</span><strong id="dashActive">0</strong></div>
+        <div class="dash-item"><span>EM ANÁLISE</span><strong id="dashReview">0</strong></div>
+        <div class="dash-item"><span>BLOQUEADOS</span><strong id="dashBlocked">0</strong></div>
+      </div>
+
+      <!-- Encontrar Agente (embutido abaixo do gerador, conforme especificação) -->
+      <div class="section-divider">
+        <span>ENCONTRAR AGENTE</span>
+      </div>
+
+      <div class="search-inline">
+        <div class="search-input-wrap">
+          <span class="search-hash">#</span>
+          <input
+            type="text"
+            id="searchInputInline"
+            class="search-input"
+            placeholder="XXXXX"
+            maxlength="6"
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+        <button id="btnSearchInline" class="btn btn-outline" type="button">BUSCAR</button>
+      </div>
+
+      <div id="searchResultInline" class="search-result-zone"></div>
+
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: BANCO DE AGENTES
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-bank" class="view">
+
+      <header class="view-header">
+        <p class="eyebrow">// MÓDULO 02</p>
+        <h1 class="glitch-text" data-text="BANCO DE AGENTES">BANCO DE AGENTES</h1>
+        <p class="view-sub" id="bankCount">0 agentes registrados</p>
+      </header>
+
+      <div class="bank-toolbar hud-frame">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <input id="bankFilterText" class="toolbar-input" type="text" placeholder="Filtrar por nome, telefone ou tag" autocomplete="off">
+        <select id="bankFilterStatus" class="toolbar-select">
+          <option value="all">Todos os status</option>
+          <option value="Autorizado">Autorizado</option>
+          <option value="Em análise">Em análise</option>
+          <option value="Bloqueado">Bloqueado</option>
+          <option value="Arquivado">Arquivado</option>
+        </select>
+        <select id="bankFilterLevel" class="toolbar-select">
+          <option value="all">Todos os níveis</option>
+          <option value="LVL-01">LVL-01</option>
+          <option value="LVL-02">LVL-02</option>
+          <option value="LVL-03">LVL-03</option>
+          <option value="LVL-04">LVL-04</option>
+          <option value="LVL-05">LVL-05</option>
+        </select>
+      </div>
+
+      <div class="agents-grid" id="agentsGrid"></div>
+
+      <div class="empty-state" id="bankEmpty">
+        <div class="empty-icon">▢</div>
+        <p>NENHUM AGENTE REGISTRADO</p>
+        <small>Gere uma tag e adicione o primeiro agente ao sistema</small>
+      </div>
+
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: BUSCAR AGENTE
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-search" class="view">
+
+      <header class="view-header">
+        <p class="eyebrow">// MÓDULO 03</p>
+        <h1 class="glitch-text" data-text="BUSCAR AGENTE">BUSCAR AGENTE</h1>
+        <p class="view-sub">Consulte um agente pela tag de identificação</p>
+      </header>
+
+      <div class="search-block search-block--advanced hud-frame">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <div class="search-input-wrap search-input-wrap--lg">
+          <span class="search-hash">⌕</span>
+          <input
+            type="text"
+            id="searchInputMain"
+            class="search-input"
+            placeholder="TAG, NOME OU TELEFONE"
+            autocomplete="off"
+            spellcheck="false"
+          >
+        </div>
+        <select id="searchStatusFilter" class="toolbar-select">
+          <option value="all">Todos os status</option>
+          <option value="Autorizado">Autorizado</option>
+          <option value="Em análise">Em análise</option>
+          <option value="Bloqueado">Bloqueado</option>
+          <option value="Arquivado">Arquivado</option>
+        </select>
+        <select id="searchLevelFilter" class="toolbar-select">
+          <option value="all">Todos os níveis</option>
+          <option value="LVL-01">LVL-01</option>
+          <option value="LVL-02">LVL-02</option>
+          <option value="LVL-03">LVL-03</option>
+          <option value="LVL-04">LVL-04</option>
+          <option value="LVL-05">LVL-05</option>
+        </select>
+        <button id="btnSearchMain" class="btn btn-primary" type="button">
+          <span class="btn-icon">⌕</span> BUSCAR AGENTE
+        </button>
+      </div>
+      <div id="scanStatus" class="scan-status">AWAITING INPUT</div>
+
+      <div id="searchResultMain" class="search-result-zone search-result-zone--lg"></div>
+
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: ID FÍSICO / CHAVEIRO
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-physical" class="view">
+
+      <header class="view-header">
+        <p class="eyebrow">// MÓDULO 04</p>
+        <h1 class="glitch-text" data-text="ID FÍSICO TRIAXIS">ID FÍSICO TRIAXIS</h1>
+        <p class="view-sub">Visualização do chaveiro de identificação do agente</p>
+      </header>
+
+      <div class="physical-layout">
+        <div class="physical-control-panel hud-frame">
+          <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+          <h3>CONFIGURAR ID FÍSICO</h3>
+          <p class="settings-desc">Escolha o produto, a versão e o agente para carregar a prévia personalizada.</p>
+          <div class="physical-product-mini">
+            <label for="physicalProductSelect">PRODUTO</label>
+            <select id="physicalProductSelect" class="toolbar-select toolbar-select--full">
+              <option value="vector_sigil">Vector Sigil</option>
+              <option value="omega_pass">Omega Pass</option>
+              <option value="mini_logo_tag">Mini Logo Tag</option>
+              <option value="mascot_badge">Mascot Badge</option>
+              <option value="agent_card">Agent ID Card</option>
+              <option value="cybershape_unit">CyberShape Unit</option>
+            </select>
+            <label for="physicalVariantSelect">VERSÃO</label>
+            <select id="physicalVariantSelect" class="toolbar-select toolbar-select--full">
+              <option value="standard">Standard</option>
+              <option value="blackout">Blackout</option>
+              <option value="lab_access">Lab Access</option>
+              <option value="prototype">Prototype</option>
+            </select>
+            <div id="physicalProductSummary" class="physical-product-summary">Vector Sigil Standard · Chaveiro ID físico com QR e serial.</div>
+          </div>
+          <div class="physical-custom-mini triaxis-addon-card">
+            <h4>PERSONALIZAÇÃO RÁPIDA</h4>
+            <label for="physicalColorSelect">COR PRINCIPAL</label>
+            <select id="physicalColorSelect" class="toolbar-select toolbar-select--full">
+              <option value="Preto fosco">Preto fosco</option>
+              <option value="Preto + vermelho TriAxis">Preto + vermelho TriAxis</option>
+              <option value="Branco técnico">Branco técnico</option>
+              <option value="Protótipo cinza">Protótipo cinza</option>
+            </select>
+            <label for="physicalDisplayText">TEXTO EXIBIDO</label>
+            <input id="physicalDisplayText" class="toolbar-input toolbar-input--full" type="text" placeholder="Nome ou codinome no ID" autocomplete="off">
+            <label class="toggle-row toggle-row--compact"><span>QR NO VERSO</span><input type="checkbox" id="physicalQrToggle" checked><span class="toggle-switch"></span></label>
+          </div>
+          <div class="physical-search-row">
+            <input id="physicalAgentSearch" class="toolbar-input" type="text" placeholder="TAG, NOME OU TELEFONE" autocomplete="off" spellcheck="false">
+            <button id="btnPhysicalSearch" class="btn btn-outline" type="button">BUSCAR</button>
+          </div>
+          <select id="physicalAgentSelect" class="toolbar-select toolbar-select--full">
+            <option value="">Selecione um agente</option>
+          </select>
+          <div class="physical-side-actions">
+            <button class="btn btn-outline btn-sm active" data-keychain-side="front" type="button">FRENTE</button>
+            <button class="btn btn-outline btn-sm" data-keychain-side="back" type="button">VERSO</button>
+            <button class="btn btn-outline btn-sm" data-keychain-side="side" type="button">LATERAL</button>
+            <button class="btn btn-outline btn-sm" data-keychain-side="concept" type="button">VISTAS DO PRODUTO</button>
+          </div>
+          <button id="btnRequestPhysicalFromView" class="btn btn-primary btn-block" type="button">SOLICITAR ID FÍSICO</button>
+          <button id="btnDownloadPhysicalPreview" class="btn btn-outline btn-block" type="button">BAIXAR PRÉVIA PNG</button>
+          <div id="physicalViewStatus" class="sidebar-search-status">AWAITING AGENT</div>
+        </div>
+
+        <div class="physical-preview-panel hud-frame">
+          <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+          <div id="physicalKeychainPreview" class="physical-id-preview"></div>
+        </div>
+      </div>
+
+      <div class="physical-tech-card hud-frame">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <div class="physical-tech-head">
+          <p class="eyebrow">// PRODUCT DATA</p>
+          <h3>VECTOR SIGIL // TECH SPECS</h3>
+          <small>Ficha técnica base para fabricação e confirmação do ID físico.</small>
+        </div>
+        <div class="physical-tech-grid">
+          <div><span>ALTURA</span><strong>70 mm</strong></div>
+          <div><span>LARGURA</span><strong>32 mm</strong></div>
+          <div><span>ESPESSURA</span><strong>4 mm</strong></div>
+          <div><span>BASE</span><strong>PLA / RESINA</strong></div>
+          <div><span>ACABAMENTO</span><strong>PRETO FOSCO + VERMELHO</strong></div>
+          <div><span>VERSO</span><strong>QR + SERIAL</strong></div>
+        </div>
+      </div>
+
+      <div class="section-divider"><span>SOLICITAÇÕES DE ID FÍSICO</span></div>
+      <div id="physicalRequestsList" class="physical-requests-list"></div>
+    </section>
+
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: CATÁLOGO TRIAXIS
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-catalog" class="view">
+      <header class="view-header catalog-header-v2">
+        <p class="eyebrow">// MÓDULO 05</p>
+        <h1 class="glitch-text" data-text="CATÁLOGO TRIAXIS">CATÁLOGO TRIAXIS</h1>
+        <p class="view-sub">Terminal de solicitação de artefatos físicos TriAxis, com filtros, detalhes, configurador e envio para produção.</p>
+      </header>
+
+      <div class="catalog-view-tabs hud-frame" id="catalogViewTabs">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <button id="btnCatalogStorefrontTab" class="catalog-view-tab active" type="button" data-catalog-panel="storefront">
+          <span>◫</span><strong>VITRINE</strong><small>Visualização do cliente</small>
+        </button>
+        <button id="btnCatalogAdminTab" class="catalog-view-tab catalog-admin-only" type="button" data-catalog-panel="admin">
+          <span>⚙</span><strong>GESTÃO DO CATÁLOGO</strong><small>Produtos, anúncios e layout</small>
+        </button>
+      </div>
+
+      <div id="catalogStorefrontPanel" class="catalog-panel active">
+      <div class="catalog-featured hud-frame" id="catalogFeatured">
+        <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+        <div class="catalog-featured-copy">
+          <p class="eyebrow">// ARTEFATO EM DESTAQUE</p>
+          <h2>VECTOR SIGIL // ACCESS TAG</h2>
+          <p>ID físico com QR, serial e estética de acesso restrito TriAxis. Um artefato de identificação para agentes autorizados.</p>
+          <div class="catalog-featured-meta">
+            <span><b>PREÇO BASE</b>R$ 19,90</span>
+            <span><b>PRAZO</b>1–2 dias</span>
+            <span><b>LINHA</b>ACCESS TAGS</span>
+          </div>
+          <div class="catalog-featured-actions">
+            <button class="btn btn-primary" data-catalog-config="vector_sigil" type="button">VALIDAR TAG E SOLICITAR</button>
+            <button class="btn btn-outline" data-catalog-detail="vector_sigil" type="button">VER DETALHES</button>
+          </div>
+        </div>
+        <div class="catalog-featured-art">
+          <img src="assets/vector-sigil-front-hero.png" alt="Vector Sigil TriAxis">
+          <span>ACCESS TAG · QR READY · LAB NODE</span>
+        </div>
+      </div>
+
+      <div class="catalog-access-gate hud-frame" id="catalogAccessGate">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <div class="catalog-access-copy">
+          <p class="eyebrow">// VALIDAÇÃO OBRIGATÓRIA</p>
+          <h3>VALIDAR TAG PARA HABILITAR COMPRAS</h3>
+          <small>Insira uma tag cadastrada. Sem validação, os botões de compra ficam bloqueados.</small>
+        </div>
+        <div class="catalog-access-form">
+          <input id="purchaseTagInput" class="toolbar-input" type="text" placeholder="#XXXXX" autocomplete="off" spellcheck="false" maxlength="6">
+          <button id="btnValidatePurchaseTag" class="btn btn-primary" type="button">VALIDAR TAG</button>
+          <button id="btnClearPurchaseTag" class="btn btn-outline" type="button">LIMPAR</button>
+        </div>
+        <div id="purchaseTagStatus" class="catalog-access-status catalog-access-status--locked">COMPRAS BLOQUEADAS · AGUARDANDO TAG</div>
+        <div id="purchaseTagAgentMini" class="catalog-access-agent-mini">AGENTE VINCULADO: NENHUM · Valide uma tag autorizada para liberar solicitações.</div>
+      </div>
+
+      <div class="catalog-toolbar-v2 hud-frame">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <input id="catalogSearchInput" class="toolbar-input" type="text" placeholder="Buscar artefato, linha ou uso" autocomplete="off" spellcheck="false">
+        <select id="catalogCategoryFilter" class="toolbar-select">
+          <option value="all">Todas as categorias</option>
+          <option value="ids">IDs e Tags</option>
+          <option value="collectibles">Colecionáveis</option>
+          <option value="services">Serviços</option>
+        </select>
+        <select id="catalogPriceFilter" class="toolbar-select">
+          <option value="all">Todos os preços</option>
+          <option value="low">Até R$ 25</option>
+          <option value="mid">R$ 25 a R$ 40</option>
+          <option value="high">Acima de R$ 40</option>
+        </select>
+        <select id="catalogTimeFilter" class="toolbar-select">
+          <option value="all">Todos os prazos</option>
+          <option value="fast">1 dia</option>
+          <option value="standard">1–3 dias</option>
+          <option value="custom">Sob consulta</option>
+        </select>
+        <select id="catalogAvailabilityFilter" class="toolbar-select">
+          <option value="all">Todos os status</option>
+          <option value="available">Disponível</option>
+          <option value="custom_order">Sob encomenda</option>
+          <option value="prototype">Protótipo</option>
+          <option value="limited">Edição limitada</option>
+        </select>
+        <button id="btnCatalogClearFilters" class="btn btn-outline btn-sm" type="button">LIMPAR FILTROS</button>
+      </div>
+
+      <div class="catalog-category-strip" id="catalogCategoryStrip" aria-label="Categorias do catálogo"></div>
+      <div class="catalog-result-count" id="catalogResultCount">Carregando catálogo...</div>
+      <div class="catalog-grid catalog-grid-v2" id="catalogGrid"></div>
+      </div>
+
+      <div id="catalogAdminPanel" class="catalog-panel catalog-admin-panel catalog-admin-only" hidden>
+        <div class="catalog-admin-hero hud-frame">
+          <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+          <div>
+            <p class="eyebrow">// CATALOG CONTROL NODE</p>
+            <h2>GERENCIAMENTO COMPLETO</h2>
+            <p>Edite produtos, imagens, preços, descrições, destaques, prioridade e toda a apresentação da vitrine sem alterar os arquivos do site.</p>
+          </div>
+          <div class="catalog-admin-actions">
+            <button id="btnCatalogAdminNew" class="btn btn-primary" type="button">+ NOVO PRODUTO</button>
+            <button id="btnCatalogAdminExport" class="btn btn-outline" type="button">EXPORTAR CATÁLOGO</button>
+            <label class="btn btn-outline catalog-import-label" for="catalogAdminImportInput">IMPORTAR CATÁLOGO</label>
+            <input id="catalogAdminImportInput" type="file" accept="application/json,.json" hidden>
+          </div>
+        </div>
+
+        <div id="catalogAdminStats" class="catalog-admin-stats"></div>
+
+        <div class="catalog-admin-layout-grid">
+          <section class="catalog-admin-settings hud-frame">
+            <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+            <div class="catalog-admin-section-head">
+              <div><p class="eyebrow">// STORE FORMAT</p><h3>FORMATAÇÃO DA VITRINE</h3></div>
+              <button id="btnCatalogAdminSaveLayout" class="btn btn-primary btn-sm" type="button">SALVAR FORMATAÇÃO</button>
+            </div>
+            <div class="catalog-layout-form">
+              <div class="form-field"><label for="catalogLayoutTitle">TÍTULO DO CATÁLOGO</label><input id="catalogLayoutTitle" type="text" maxlength="60"></div>
+              <div class="form-field"><label for="catalogLayoutSubtitle">SUBTÍTULO</label><textarea id="catalogLayoutSubtitle" rows="2" maxlength="220"></textarea></div>
+              <div class="form-row">
+                <div class="form-field"><label for="catalogLayoutColumns">COLUNAS</label><select id="catalogLayoutColumns"><option value="auto">Automático</option><option value="2">2 colunas</option><option value="3">3 colunas</option><option value="4">4 colunas</option></select></div>
+                <div class="form-field"><label for="catalogLayoutDensity">DENSIDADE DOS CARDS</label><select id="catalogLayoutDensity"><option value="detailed">Detalhado</option><option value="compact">Compacto</option><option value="minimal">Minimalista</option></select></div>
+              </div>
+              <div class="form-row">
+                <div class="form-field"><label for="catalogLayoutImageRatio">FORMATO DA IMAGEM</label><select id="catalogLayoutImageRatio"><option value="wide">Paisagem</option><option value="square">Quadrado</option><option value="portrait">Retrato</option></select></div>
+                <div class="form-field"><label for="catalogLayoutAlignment">ALINHAMENTO</label><select id="catalogLayoutAlignment"><option value="left">Esquerda</option><option value="center">Centralizado</option></select></div>
+              </div>
+              <div class="form-row">
+                <div class="form-field"><label for="catalogLayoutGap">ESPAÇAMENTO</label><select id="catalogLayoutGap"><option value="tight">Compacto</option><option value="normal">Normal</option><option value="wide">Amplo</option></select></div>
+                <div class="form-field"><label for="catalogLayoutSort">ORDENAÇÃO DA VITRINE</label><select id="catalogLayoutSort"><option value="manual">Prioridade manual</option><option value="name">Nome A–Z</option><option value="price_asc">Menor preço</option><option value="price_desc">Maior preço</option></select></div>
+              </div>
+              <div class="catalog-layout-toggles">
+                <label class="toggle-row"><span>EXIBIR DESTAQUE PRINCIPAL</span><input id="catalogLayoutShowFeatured" type="checkbox"><span class="toggle-switch"></span></label>
+                <label class="toggle-row"><span>EXIBIR CATEGORIA E TIPO</span><input id="catalogLayoutShowData" type="checkbox"><span class="toggle-switch"></span></label>
+                <label class="toggle-row"><span>EXIBIR ESPECIFICAÇÕES</span><input id="catalogLayoutShowSpecs" type="checkbox"><span class="toggle-switch"></span></label>
+                <label class="toggle-row"><span>EXIBIR FAIXA DE VALIDAÇÃO</span><input id="catalogLayoutShowRequirement" type="checkbox"><span class="toggle-switch"></span></label>
+                <label class="toggle-row"><span>EXIBIR STATUS DE DISPONIBILIDADE</span><input id="catalogLayoutShowAvailability" type="checkbox"><span class="toggle-switch"></span></label>
+              </div>
+            </div>
+          </section>
+
+          <section class="catalog-admin-featured hud-frame">
+            <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+            <div class="catalog-admin-section-head"><div><p class="eyebrow">// FEATURED AD</p><h3>ANÚNCIO EM DESTAQUE</h3></div></div>
+            <div id="catalogAdminFeaturedPreview" class="catalog-admin-featured-preview"></div>
+            <div class="form-field"><label for="catalogFeaturedKicker">TEXTO SUPERIOR</label><input id="catalogFeaturedKicker" type="text" maxlength="60"></div>
+            <div class="form-field"><label for="catalogFeaturedNote">CHAMADA PROMOCIONAL</label><textarea id="catalogFeaturedNote" rows="3" maxlength="220"></textarea></div>
+            <button id="btnCatalogAdminSaveFeatured" class="btn btn-outline btn-block" type="button">SALVAR TEXTO DO DESTAQUE</button>
+          </section>
+        </div>
+
+        <section class="catalog-admin-products hud-frame">
+          <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+          <div class="catalog-admin-section-head">
+            <div><p class="eyebrow">// PRODUCT DATABASE</p><h3>PRODUTOS E PRIORIDADE</h3><small>Arraste os cards ou use as setas para alterar a ordem manual.</small></div>
+            <div class="catalog-admin-search-row"><input id="catalogAdminSearch" class="toolbar-input" type="text" placeholder="Buscar produto no painel"><select id="catalogAdminStatusFilter" class="toolbar-select"><option value="all">Todos</option><option value="published">Publicados</option><option value="hidden">Ocultos</option><option value="featured">Destaque</option></select></div>
+          </div>
+          <div id="catalogAdminProductList" class="catalog-admin-product-list"></div>
+        </section>
+
+        <div class="catalog-admin-danger hud-frame">
+          <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+          <div><strong>RESTAURAR CATÁLOGO PADRÃO</strong><small>Remove todas as alterações administrativas e recupera os seis produtos originais.</small></div>
+          <button id="btnCatalogAdminReset" class="btn btn-danger" type="button">RESTAURAR PADRÃO</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: PRODUÇÃO
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-production" class="view">
+      <header class="view-header">
+        <p class="eyebrow">// MÓDULO 06</p>
+        <h1 class="glitch-text" data-text="PRODUÇÃO">PRODUÇÃO</h1>
+        <p class="view-sub">Painel de acompanhamento dos pedidos físicos TriAxis.</p>
+      </header>
+
+      <div class="production-dashboard" id="productionDashboard"></div>
+
+      <div class="production-toolbar hud-frame">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <input id="productionFilterText" class="toolbar-input" type="text" placeholder="Filtrar por agente, tag, produto ou QR" autocomplete="off">
+        <select id="productionFilterStatus" class="toolbar-select">
+          <option value="all">Todos os status</option>
+          <option value="Pendente">Pendente</option>
+          <option value="Modelagem">Modelagem</option>
+          <option value="Impressão">Impressão</option>
+          <option value="Pintura">Pintura</option>
+          <option value="Finalizado">Finalizado</option>
+          <option value="Entregue">Entregue</option>
+        </select>
+      </div>
+
+      <div id="productionBoard" class="production-board"></div>
+    </section>
+
+
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: ORÇAMENTO RÁPIDO / CARRINHO
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-quote" class="view triaxis-addon-view">
+      <header class="view-header">
+        <p class="eyebrow">// MÓDULO COMERCIAL</p>
+        <h1 class="glitch-text" data-text="ORÇAMENTO RÁPIDO">ORÇAMENTO RÁPIDO</h1>
+        <p class="view-sub">Monte uma solicitação de produto com estimativa automática e envie para produção.</p>
+      </header>
+
+      <div class="quote-layout">
+        <form id="quoteForm" class="quote-panel hud-frame">
+          <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+          <h3>CONFIGURAR PRODUTO</h3>
+          <div class="form-row">
+            <div class="form-field"><label for="quoteProduct">TIPO DE PEÇA</label><select id="quoteProduct"><option value="Vector Sigil">Vector Sigil / ID físico</option><option value="Miniatura premium">Miniatura premium</option><option value="Protótipo técnico">Protótipo técnico</option><option value="Badge / chaveiro">Badge / chaveiro</option><option value="Peça customizada">Peça customizada</option></select></div>
+            <div class="form-field"><label for="quoteSize">TAMANHO</label><select id="quoteSize"><option value="P">Pequeno · até 7 cm</option><option value="M" selected>Médio · 8 a 15 cm</option><option value="G">Grande · 16 a 25 cm</option><option value="XG">Especial · acima de 25 cm</option></select></div>
+          </div>
+          <div class="form-row">
+            <div class="form-field"><label for="quoteMaterial">MATERIAL</label><select id="quoteMaterial"><option value="PLA">PLA</option><option value="PLA+">PLA+</option><option value="Resina">Resina</option><option value="Protótipo econômico">Protótipo econômico</option></select></div>
+            <div class="form-field"><label for="quoteFinish">ACABAMENTO</label><select id="quoteFinish"><option value="Bruto">Bruto</option><option value="Lixado">Lixado</option><option value="Pintura simples">Pintura simples</option><option value="Pintura premium">Pintura premium</option></select></div>
+          </div>
+          <div class="form-row">
+            <div class="form-field"><label for="quoteQty">QUANTIDADE</label><input id="quoteQty" type="number" min="1" max="99" value="1"></div>
+            <div class="form-field"><label for="quoteUrgency">PRAZO</label><select id="quoteUrgency"><option value="normal">Normal</option><option value="fast">Prioritário</option><option value="rush">Urgente</option></select></div>
+          </div>
+          <div class="form-field"><label for="quoteCustomer">CLIENTE / AGENTE</label><input id="quoteCustomer" type="text" placeholder="Nome do cliente ou agente" autocomplete="off"></div>
+          <div class="form-field"><label for="quoteNotes">OBSERVAÇÕES</label><textarea id="quoteNotes" placeholder="Cor, referência, detalhes de impressão ou pintura"></textarea></div>
+          <div class="quote-actions"><button class="btn btn-outline" id="btnQuoteCalc" type="button">CALCULAR</button><button class="btn btn-primary" id="btnQuoteCreate" type="button">ENVIAR PARA PRODUÇÃO</button></div>
+        </form>
+
+        <aside class="quote-result-panel hud-frame" id="quoteResultPanel">
+          <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+          <p class="eyebrow">// ESTIMATIVA</p>
+          <h2 id="quotePrice">R$ 0,00</h2>
+          <p id="quoteDeadline">Prazo estimado: —</p>
+          <div id="quoteSummary" class="quote-summary">Configure o produto para gerar uma estimativa TriAxis.</div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: VERIFICAR QR / TAG
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-verify" class="view triaxis-addon-view">
+      <header class="view-header">
+        <p class="eyebrow">// VERIFY NODE</p>
+        <h1 class="glitch-text" data-text="VERIFICAR QR">VERIFICAR QR</h1>
+        <p class="view-sub">Consulte tags, QR IDs e credenciais de agentes ou pedidos físicos.</p>
+      </header>
+      <div class="verify-panel hud-frame">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <div class="search-input-wrap search-input-wrap--lg"><span class="search-hash">◎</span><input id="verifyInput" class="search-input" type="text" placeholder="TAG, QR ID OU CÓDIGO DE PEDIDO" autocomplete="off" spellcheck="false"></div>
+        <button id="btnVerifyNode" class="btn btn-primary" type="button">VERIFICAR</button>
+      </div>
+      <div id="verifyResult" class="verify-result-zone"></div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: LABORATÓRIO TRIAXIS
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-lab" class="view triaxis-addon-view">
+      <header class="view-header">
+        <p class="eyebrow">// BRAND SYSTEM</p>
+        <h1 class="glitch-text" data-text="LABORATÓRIO TRIAXIS">LABORATÓRIO TRIAXIS</h1>
+        <p class="view-sub">Identidade, processo, galeria e universo visual da TriAxis CyberShape.</p>
+      </header>
+      <div class="lab-hero hud-frame">
+        <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+        <h2>Ideias digitais. Forma física.</h2>
+        <p>A TriAxis converte arquivo, conceito e estética em artefatos físicos com impressão 3D, acabamento manual e visual de laboratório cyberpunk.</p>
+      </div>
+      <div class="lab-process-grid">
+        <div><span>01</span><strong>CONCEITO</strong><p>Briefing, referência visual e função da peça.</p></div>
+        <div><span>02</span><strong>ARQUIVO</strong><p>Modelo digital, ajustes e preparação técnica.</p></div>
+        <div><span>03</span><strong>IMPRESSÃO</strong><p>Materialização camada por camada.</p></div>
+        <div><span>04</span><strong>ACABAMENTO</strong><p>Lixa, pintura, selagem e identidade final.</p></div>
+      </div>
+      <div class="section-divider"><span>GALERIA DE ARTEFATOS</span></div>
+      <div class="lab-gallery" id="labGallery"></div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────
+         VIEW: CONFIGURAÇÕES
+    ─────────────────────────────────────────────────────── -->
+    <section id="view-settings" class="view">
+
+      <header class="view-header">
+        <p class="eyebrow">// MÓDULO 07</p>
+        <h1 class="glitch-text" data-text="CONFIGURAÇÕES">CONFIGURAÇÕES</h1>
+        <p class="view-sub">Preferências do sistema e gerenciamento de dados</p>
+      </header>
+
+      <div class="settings-grid">
+
+        <div class="settings-card hud-frame">
+          <span class="hud-corner tl"></span>
+          <span class="hud-corner br"></span>
+          <h3>TEMA VISUAL</h3>
+          <p class="settings-desc">Alterne rapidamente entre paletas oficiais da TriAxis.</p>
+          <select id="themeSelect" class="toolbar-select toolbar-select--full">
+            <option value="classic">TriAxis Classic</option>
+            <option value="racing">TriAxis Racing</option>
+            <option value="blueprint">TriAxis Blueprint</option>
+            <option value="prototype">TriAxis Prototype</option>
+          </select>
+        </div>
+
+        <div class="settings-card hud-frame">
+          <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+          <h3>MODO DO SISTEMA</h3>
+          <p class="settings-desc">Simulação visual local. No modo Cliente, telas e ações administrativas ficam bloqueadas; volte ao modo Admin pelo botão de simulação.</p>
+          <select id="modeSelect" class="toolbar-select toolbar-select--full">
+            <option value="admin">Modo Admin</option>
+            <option value="client">Modo Cliente</option>
+          </select>
+        </div>
+
+        <div class="settings-card hud-frame">
+          <span class="hud-corner tl"></span>
+          <span class="hud-corner br"></span>
+          <h3>ESTATÍSTICAS</h3>
+          <div class="stat-row">
+            <span class="stat-label">TOTAL DE AGENTES</span>
+            <span class="stat-value" id="statTotal">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">ÚLTIMO REGISTRO</span>
+            <span class="stat-value" id="statLast">—</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">ARMAZENAMENTO</span>
+            <span class="stat-value" id="statStorage">0 KB</span>
+          </div>
+        </div>
+
+        <div class="settings-card hud-frame">
+          <span class="hud-corner tl"></span>
+          <span class="hud-corner br"></span>
+          <h3>EFEITOS VISUAIS</h3>
+          <label class="toggle-row">
+            <span>SCANLINES</span>
+            <input type="checkbox" id="toggleScanlines" checked>
+            <span class="toggle-switch"></span>
+          </label>
+          <label class="toggle-row">
+            <span>GLITCH DE TEXTO</span>
+            <input type="checkbox" id="toggleGlitch" checked>
+            <span class="toggle-switch"></span>
+          </label>
+          <label class="toggle-row">
+            <span>RUÍDO / GRAIN</span>
+            <input type="checkbox" id="toggleNoise" checked>
+            <span class="toggle-switch"></span>
+          </label>
+        </div>
+
+        <div class="settings-card hud-frame">
+          <span class="hud-corner tl"></span>
+          <span class="hud-corner br"></span>
+          <h3>DADOS</h3>
+          <p class="settings-desc">Exportar backup completo criptografado com senha, incluindo as credenciais protegidas. Guarde o arquivo e a senha em local seguro.</p>
+          <button id="btnExportData" class="btn btn-outline btn-block" type="button">
+            <span class="btn-icon">⇩</span> EXPORTAR BACKUP
+          </button>
+          <label class="btn btn-outline btn-block import-label" for="inputImportData">
+            <span class="btn-icon">⇧</span> IMPORTAR BACKUP
+          </label>
+          <input id="inputImportData" type="file" accept="application/json,.json" hidden>
+        </div>
+
+        <div class="settings-card hud-frame settings-card--danger">
+          <span class="hud-corner tl"></span>
+          <span class="hud-corner br"></span>
+          <h3>ZONA DE RISCO</h3>
+          <p class="settings-desc">Esta ação apaga permanentemente todos os agentes registrados no navegador.</p>
+          <button id="btnClearData" class="btn btn-danger btn-block" type="button">
+            <span class="btn-icon">✕</span> LIMPAR BANCO DE DADOS
+          </button>
+        </div>
+
+        <div class="settings-card hud-frame settings-card--wide">
+          <span class="hud-corner tl"></span>
+          <span class="hud-corner br"></span>
+          <h3>CHECKLIST DE TESTE</h3>
+          <div class="system-checklist">
+            <span>GERAR TAG</span><span>CADASTRAR AGENTE</span><span>ABRIR ID</span><span>SOLICITAR PRODUTO</span><span>EXPORTAR PNG</span><span>ATUALIZAR PRODUÇÃO</span>
+          </div>
+          <p class="settings-desc">Fluxo recomendado para validar o sistema antes de usar com pedidos reais.</p>
+        </div>
+
+        <div class="settings-card hud-frame settings-card--wide">
+          <span class="hud-corner tl"></span>
+          <span class="hud-corner br"></span>
+          <h3>LOG DO SISTEMA</h3>
+          <div id="systemLog" class="system-log"></div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: ADICIONAR A PERFIL
+════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalAddProfile" aria-hidden="true">
+  <div class="modal hud-frame" role="dialog" aria-labelledby="modalAddTitle">
+    <span class="hud-corner tl"></span>
+    <span class="hud-corner tr"></span>
+    <span class="hud-corner bl"></span>
+    <span class="hud-corner br"></span>
+
+    <button class="modal-close" type="button" data-close-modal="modalAddProfile" aria-label="Fechar">✕</button>
+
+    <div class="modal-header">
+      <p class="eyebrow">// NOVO REGISTRO</p>
+      <h2 id="modalAddTitle">CADASTRAR AGENTE</h2>
+    </div>
+
+    <form id="formAddProfile" novalidate>
+
+      <div class="form-tag-preview">
+        <span class="form-tag-label">TAG ATRIBUÍDA</span>
+        <span class="form-tag-value" id="formTagValue">#-----</span>
+      </div>
+
+      <div class="form-photo-upload">
+        <div class="photo-preview" id="photoPreview">
+          <span class="photo-preview-placeholder">SEM FOTO</span>
+        </div>
+        <label class="btn btn-outline btn-sm" for="inputPhoto">
+          <span class="btn-icon">⇧</span> ENVIAR FOTO
+        </label>
+        <input type="file" id="inputPhoto" accept="image/*" hidden>
+      </div>
+
+      <div class="form-field">
+        <label for="inputName">NOME DO AGENTE</label>
+        <input type="text" id="inputName" placeholder="Ex: João Silva" autocomplete="off" required>
+      </div>
+
+      <div class="form-field">
+        <label for="inputPhone">TELEFONE</label>
+        <input type="tel" id="inputPhone" placeholder="(00) 00000-0000" autocomplete="off" required>
+      </div>
+
+      <div class="form-field">
+        <label for="inputAccessPassword">SENHA DE ACESSO</label>
+        <input type="password" id="inputAccessPassword" placeholder="8 caracteres: 4 números, 2 símbolos e 2 letras" autocomplete="new-password" required>
+        <small>Use exatamente 4 números, 2 símbolos, uma letra maiúscula e uma minúscula, sem sequência numérica.</small>
+      </div>
+
+      <div class="form-field">
+        <label for="inputRole">FUNÇÃO / CARGO</label>
+        <input type="text" id="inputRole" placeholder="Ex: Operador TriAxis" autocomplete="off">
+      </div>
+
+      <div class="form-row">
+        <div class="form-field">
+          <label for="inputLevel">NÍVEL DE ACESSO</label>
+          <select id="inputLevel">
+            <option value="LVL-01">LVL-01 · Visitante</option>
+            <option value="LVL-02" selected>LVL-02 · Agente qualificado</option>
+            <option value="LVL-03">LVL-03 · Operador interno</option>
+            <option value="LVL-04">LVL-04 · Núcleo TriAxis</option>
+            <option value="LVL-05">LVL-05 · Restrito</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="inputStatus">STATUS</label>
+          <select id="inputStatus">
+            <option value="Autorizado" selected>Autorizado</option>
+            <option value="Em análise">Em análise</option>
+            <option value="Bloqueado">Bloqueado</option>
+            <option value="Arquivado">Arquivado</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label for="inputNotes">OBSERVAÇÃO INTERNA</label>
+        <textarea id="inputNotes" placeholder="Notas do registro, função, origem ou condição especial"></textarea>
+      </div>
+
+      <p class="form-error" id="formError"></p>
+
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" data-close-modal="modalAddProfile">CANCELAR</button>
+        <button type="submit" class="btn btn-primary">CONFIRMAR REGISTRO</button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: ID DIGITAL (credencial)
+════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalIdCard" aria-hidden="true">
+  <div class="modal id-card-modal" role="dialog" aria-labelledby="idCardTitle">
+
+    <button class="modal-close modal-close--light" type="button" data-close-modal="modalIdCard" aria-label="Fechar">✕</button>
+
+    <div class="id-card-wrap" id="idCardWrap">
+      <div class="id-card hud-frame" id="idCardCanvasSource">
+        <span class="hud-corner tl"></span>
+        <span class="hud-corner tr"></span>
+        <span class="hud-corner bl"></span>
+        <span class="hud-corner br"></span>
+        <div class="id-card-sheen" aria-hidden="true"></div>
+
+        <div class="id-card-face id-card-front">
+          <div class="id-card-header">
+            <img class="id-card-logo" src="assets/mini-logo.png" alt="Mini logo padrão TriAxis" loading="eager">
+            <div>
+              <div class="id-card-brand" id="idCardTitle">TRIAXIS CYBERSHAPE</div>
+              <div class="id-card-subbrand">身分証明書 // CREDENCIAL DIGITAL</div>
+            </div>
+          </div>
+
+          <div class="id-card-body">
+            <div class="id-card-photo" id="idCardPhoto"></div>
+
+            <div class="id-card-info">
+              <div class="id-field">
+                <span class="id-field-label">NOME</span>
+                <span class="id-field-value" id="idCardName">—</span>
+              </div>
+              <div class="id-field">
+                <span class="id-field-label">TAG</span>
+                <span class="id-field-value id-field-value--tag" id="idCardTag">#-----</span>
+              </div>
+              <div class="id-field">
+                <span class="id-field-label">TELEFONE</span>
+                <span class="id-field-value" id="idCardPhone">—</span>
+              </div>
+              <div class="id-field">
+                <span class="id-field-label">FUNÇÃO</span>
+                <span class="id-field-value" id="idCardRole">—</span>
+              </div>
+              <div class="id-field id-field-inline">
+                <span><span class="id-field-label">NÍVEL</span><span class="id-field-value" id="idCardLevel">LVL-02</span></span>
+                <span><span class="id-field-label">STATUS</span><span class="id-field-value id-status" id="idCardStatus"><span class="id-status-dot"></span> AUTORIZADO</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="id-card-barcode" aria-hidden="true"></div>
+
+          <div class="id-card-footer">
+            <p class="id-card-slogan">Agente qualificado</p>
+            <p class="id-card-katakana">シンライ</p>
+          </div>
+        </div>
+
+        <div class="id-card-face id-card-back id-card-back--reworked">
+          <div class="id-back-topline">
+            <div>
+              <span class="id-back-kicker">TRIAXIS VERIFY NODE</span>
+              <strong id="idBackTag">#-----</strong>
+            </div>
+            <div class="id-back-stamp">CONFIDENTIAL<br><span>信頼</span></div>
+          </div>
+
+          <div class="id-back-main-grid">
+            <aside class="id-back-qr-zone id-back-qr-zone--compact">
+              <div class="qr-matrix qr-matrix--real" id="idQrMatrix" aria-label="QR Code de verificação do agente"></div>
+              <div class="id-qr-caption">SCAN TO VERIFY<br><span>TRIAXIS AGENT NODE</span></div>
+              <div class="id-back-mini-code">TRX-LAB-2026 · INTERNAL USE ONLY</div>
+            </aside>
+
+            <section class="id-back-data-panel">
+              <div class="id-topic id-topic--wide">
+                <h4>IDENTIFICAÇÃO</h4>
+                <p><b>Nome</b><span id="idBackName">—</span></p>
+                <p><b>Tag</b><span id="idBackTagTopic">#-----</span></p>
+                <p><b>QR ID</b><span id="idBackQrId" title="QR ID">—</span></p>
+              </div>
+
+              <div class="id-back-two-cols">
+                <div class="id-topic">
+                  <h4>ACESSO</h4>
+                  <p><b>Nível</b><span id="idBackLevel">—</span></p>
+                  <p><b>Status</b><span id="idBackStatus">—</span></p>
+                  <p><b>Função</b><span id="idBackRole">—</span></p>
+                </div>
+                <div class="id-topic">
+                  <h4>REGISTRO</h4>
+                  <p><b>Criação</b><span id="idCardDate">—</span></p>
+                  <p><b>Atualização</b><span id="idBackUpdated">—</span></p>
+                  <p><b>Código</b><span id="idInternalCode">TX-000000</span></p>
+                </div>
+              </div>
+
+              <div class="id-topic id-topic--contact">
+                <h4>CONTATO</h4>
+                <p><b>Telefone</b><span id="idBackPhone">—</span></p>
+              </div>
+            </section>
+          </div>
+
+          <div class="id-topic id-topic--notes id-topic--notes-reworked">
+            <h4>OBSERVAÇÃO INTERNA</h4>
+            <div class="id-notes" id="idCardNotes">REGISTRO INTERNO TRIAXIS</div>
+          </div>
+
+          <div class="id-back-adorns id-back-adorns--reworked">
+            <span>SYSTEM ACCESS</span>
+            <span>AUTHORIZED PERSONNEL ONLY</span>
+            <span>AGENT VERIFICATION</span>
+            <span>TRIAXIS LAB NODE</span>
+          </div>
+
+          <div class="id-back-warning">CREDENCIAL RESTRITA · VERIFY BEFORE ACCESS · TRX-LAB-2026</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="id-card-actions">
+      <button id="btnFlipId" class="btn btn-outline btn-sm" type="button">VIRAR ID</button>
+      <button id="btnRequestPhysicalFromId" class="btn btn-outline btn-sm" type="button">SOLICITAR ID FÍSICO</button>
+      <button id="btnDownloadId" class="btn btn-primary btn-sm" type="button">BAIXAR PNG</button>
+    </div>
+
+  </div>
+</div>
+
+
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: AGENTE EXPANDIDO NO BANCO
+════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalBankAgent" aria-hidden="true">
+  <div class="modal bank-agent-modal hud-frame" role="dialog" aria-labelledby="bankModalName">
+    <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+    <button class="modal-close" type="button" data-close-modal="modalBankAgent" aria-label="Fechar">✕</button>
+
+    <div class="bank-agent-modal-grid">
+      <div class="bank-agent-modal-info">
+        <p class="eyebrow">// AGENT NODE</p>
+        <h2 id="bankModalName">—</h2>
+        <div class="bank-agent-modal-tags">
+          <span class="badge badge-red" id="bankModalTag">#-----</span>
+          <span class="badge" id="bankModalStatusBadge">—</span>
+        </div>
+
+        <div class="bank-agent-details">
+          <div class="id-topic"><h4>IDENTIFICAÇÃO</h4><p><b>Telefone</b><span id="bankModalPhone">—</span></p><p><b>Função</b><span id="bankModalRole">—</span></p><p><b>Nível</b><span id="bankModalLevel">—</span></p><p><b>Status</b><span id="bankModalStatus">—</span></p></div>
+          <div class="id-topic"><h4>REGISTRO</h4><p><b>QR ID</b><span id="bankModalQrId">—</span></p><p><b>Criação</b><span id="bankModalCreated">—</span></p><p><b>Atualização</b><span id="bankModalUpdated">—</span></p></div>
+          <div class="id-topic id-topic--notes"><h4>OBSERVAÇÃO INTERNA</h4><div class="id-notes" id="bankModalNotes">REGISTRO INTERNO TRIAXIS</div></div>
+          <div class="id-topic id-topic--notes"><h4>HISTÓRICO DE PEDIDOS</h4><div class="id-notes" id="bankModalHistory">SEM PEDIDOS VINCULADOS</div></div>
+        </div>
+
+        <div class="bank-agent-actions">
+          <button id="btnBankModalOpenId" class="btn btn-primary" type="button">ABRIR ID DIGITAL</button>
+          <button id="btnBankModalRequestPhysical" class="btn btn-outline" type="button">SOLICITAR ID FÍSICO</button>
+          <button id="btnBankModalExport" class="btn btn-outline" type="button">EXPORTAR FICHA PNG</button>
+          <button id="btnBankModalRemove" class="btn btn-danger" type="button">REMOVER AGENTE</button>
+        </div>
+      </div>
+
+      <aside class="bank-agent-photo-panel">
+        <div class="bank-agent-photo-large" id="bankModalPhoto"></div>
+        <div class="bank-agent-photo-caption">FOTO DO AGENTE // TRIAXIS REGISTRY</div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: DETALHES DO PRODUTO / CATÁLOGO V2
+════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalCatalogDetail" aria-hidden="true">
+  <div class="modal catalog-detail-modal hud-frame" role="dialog" aria-labelledby="catalogDetailTitle">
+    <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+    <button class="modal-close" type="button" data-close-modal="modalCatalogDetail" aria-label="Fechar">✕</button>
+    <div id="catalogDetailContent"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: CONFIGURADOR DE PRODUTO / CATÁLOGO V2
+════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalCatalogConfig" aria-hidden="true">
+  <div class="modal catalog-config-modal hud-frame" role="dialog" aria-labelledby="catalogConfigTitle">
+    <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+    <button class="modal-close" type="button" data-close-modal="modalCatalogConfig" aria-label="Fechar">✕</button>
+    <div class="modal-header">
+      <p class="eyebrow">// CONFIGURADOR</p>
+      <h2 id="catalogConfigTitle">SOLICITAR PRODUTO</h2>
+    </div>
+    <div id="catalogConfigContent"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: EDITOR ADMINISTRATIVO DO CATÁLOGO
+════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalCatalogAdminEditor" aria-hidden="true">
+  <div class="modal catalog-admin-editor-modal hud-frame" role="dialog" aria-labelledby="catalogAdminEditorTitle">
+    <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+    <button class="modal-close" type="button" data-close-modal="modalCatalogAdminEditor" aria-label="Fechar">✕</button>
+    <div class="modal-header catalog-admin-editor-head">
+      <div><p class="eyebrow">// PRODUCT EDITOR</p><h2 id="catalogAdminEditorTitle">EDITAR PRODUTO</h2></div>
+      <span id="catalogAdminEditorState" class="catalog-admin-editor-state">ALTERAÇÕES LOCAIS</span>
+    </div>
+    <div id="catalogAdminEditorContent"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: SOLICITAÇÃO DE ID FÍSICO
+════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modalPhysicalId" aria-hidden="true">
+  <div class="modal physical-request-modal hud-frame" role="dialog" aria-labelledby="physicalModalTitle">
+    <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
+    <button class="modal-close" type="button" data-close-modal="modalPhysicalId" aria-label="Fechar">✕</button>
+    <div class="modal-header">
+      <p class="eyebrow">// FABRICAÇÃO</p>
+      <h2 id="physicalModalTitle">SOLICITAÇÃO DE ID FÍSICO</h2>
+    </div>
+    <div class="physical-modal-grid">
+      <div id="physicalModalPreview" class="physical-id-preview physical-id-preview--modal"></div>
+      <div class="physical-modal-info">
+        <div class="form-tag-preview"><span class="form-tag-label">AGENTE</span><span class="form-tag-value" id="physicalModalAgent">—</span></div>
+        <div class="id-topic"><h4>DADOS DO PEDIDO</h4><p><b>Produto</b><span id="physicalModalProduct">Vector Sigil</span></p><p><b>Versão</b><span id="physicalModalVariant">Standard</span></p><p><b>Tag</b><span id="physicalModalTag">—</span></p><p><b>QR ID</b><span id="physicalModalQrId">—</span></p><p><b>Status inicial</b><span>Pendente</span></p></div>
+
+        <div class="physical-order-options">
+          <div class="form-field">
+            <label for="physicalMaterialSelect">MATERIAL</label>
+            <select id="physicalMaterialSelect">
+              <option value="pla_fosco">PLA preto fosco</option>
+              <option value="pla_vermelho">PLA preto + detalhe vermelho</option>
+              <option value="resina">Resina premium</option>
+              <option value="prototipo">Versão protótipo</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="physicalFinishSelect">ACABAMENTO</label>
+            <select id="physicalFinishSelect">
+              <option value="simples">Fosco simples</option>
+              <option value="premium">Premium com pintura</option>
+              <option value="scratch">Desgaste / scratch</option>
+              <option value="verniz">Verniz semi-brilho</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="physicalAccessorySelect">ACESSÓRIO</label>
+            <select id="physicalAccessorySelect">
+              <option value="ball_chain">Corrente ball chain</option>
+              <option value="argola">Argola simples</option>
+              <option value="mosquetao">Mosquetão</option>
+              <option value="sem_corrente">Sem corrente</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="physical-price-box">
+          <span>PREÇO ESTIMADO</span>
+          <strong id="physicalModalPrice">R$ 0,00</strong>
+          <small>Estimativa automática baseada na configuração selecionada.</small>
+        </div>
+
+        <div class="form-field"><label for="physicalRequestNotes">OBSERVAÇÃO OPCIONAL</label><textarea id="physicalRequestNotes" placeholder="Ex: entregar junto do próximo pedido, cor da argola, observação de produção..."></textarea></div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-outline" data-close-modal="modalPhysicalId">CANCELAR</button>
+          <button type="button" id="btnConfirmPhysicalRequest" class="btn btn-primary">REGISTRAR SOLICITAÇÃO</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     TOASTS
+════════════════════════════════════════════════════════════════ -->
+<div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+<script src="assets/qrcode.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.tmp
+*.log
+
+# Segredos e configurações locais
+.env
+.env.*
+!.env.example
+
+# Backups e exportações locais
+backups/
+*backup*.json
+
