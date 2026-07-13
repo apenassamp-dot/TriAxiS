@@ -1,34 +1,51 @@
 TRIAXIS NEXUS V4
 =================
 
+ESTADO ATUAL
+O projeto está em migração do protótipo local para uma aplicação conectada.
+
+Já usam Supabase:
+- criação de conta por e-mail e senha;
+- confirmação de e-mail;
+- sessões autenticadas;
+- perfil e tag gerados no banco;
+- papéis customer, production, support e admin;
+- políticas RLS no banco.
+
+Ainda usam dados locais nesta etapa:
+- catálogo exibido pelo frontend;
+- pedidos e produção;
+- painel de agentes legado;
+- configurações visuais e logs locais.
+
 COMO ABRIR
-1. Extraia a pasta completa do arquivo ZIP.
-2. Execute INICIAR_TRIAXIS_NEXUS_V4.bat ou abra index.html no navegador.
-3. Não abra o HTML diretamente de dentro do ZIP.
+1. Mantenha a pasta completa do projeto.
+2. Execute INICIAR_TRIAXIS_NEXUS_V4.bat ou abra index.html.
+3. É necessário acesso à internet para carregar o cliente Supabase e autenticar.
+4. Não abra o HTML diretamente de dentro de um arquivo ZIP.
 
-NOVIDADE PRINCIPAL — GESTÃO COMPLETA DO CATÁLOGO
-No modo ADMIN, abra CATÁLOGO e selecione a aba GESTÃO DO CATÁLOGO.
+CADASTRO E LOGIN
+- Novas contas devem ser criadas em MEU PERFIL > CRIAR ID.
+- O usuário entra com e-mail e senha.
+- A tag é gerada pelo banco e não funciona como senha.
+- O cadastro local de agentes pelo painel legado está desativado.
+- Acesso administrativo depende do papel admin no Supabase.
 
-O painel permite:
-- criar, editar, duplicar, ocultar e remover produtos;
-- alterar preço, prazo, descrição, categoria, status e personalização;
-- carregar imagem principal e galeria pelo próprio site;
-- definir o anúncio em destaque;
-- alterar prioridade por setas ou arrastar e soltar;
-- configurar colunas, densidade, formato das imagens, alinhamento e espaçamento;
-- ocultar ou exibir campos da vitrine;
-- exportar, importar e restaurar o catálogo.
+BANCO
+- A migração inicial está em supabase/migrations/001_initial_schema.sql.
+- Instruções de aplicação e promoção do primeiro admin estão em supabase/README.md.
+- Nunca coloque service_role, sb_secret, senha do banco ou token pessoal no frontend.
 
-PERSISTÊNCIA
-Os dados continuam sendo armazenados no navegador por localStorage. O backup completo da Nexus V4 inclui agentes, pedidos, catálogo, layout e configurações. Imagens enviadas pelo painel são otimizadas e salvas localmente; o limite depende do armazenamento do navegador.
+ARQUIVOS PRINCIPAIS
+- index.html: estrutura da interface;
+- style.css: identidade visual;
+- script.js: interface e fluxos ainda em migração;
+- supabase-config.js: URL e chave publicável do frontend;
+- supabase-auth.js: integração de autenticação;
+- supabase/: banco versionado e documentação;
+- assets/: imagens e QR Code.
 
-ARQUIVOS
-- index.html: estrutura do sistema
-- style.css: identidade visual e interfaces
-- script.js: funções, banco local e painel administrativo
-- assets/: imagens utilizadas pelo projeto
-
-INTEGRIDADE V4
-- QR Code incluído localmente em assets/qrcode.min.js; não depende de CDN.
-- O arquivo MANIFESTO_SHA256.txt contém os hashes dos arquivos do pacote.
-- O sistema foi testado em navegador com criação e remoção de produto, alteração de layout, modo cliente e geração de QR.
+SEGURANÇA
+- A chave sb_publishable é pública por definição e depende das políticas RLS.
+- Operações administrativas não devem usar service_role no navegador.
+- Catálogo e pedidos serão migrados nas próximas etapas.

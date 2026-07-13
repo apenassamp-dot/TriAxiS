@@ -221,13 +221,13 @@
               </div>
 
               <div class="login-field-card">
-                <div class="login-field-head"><span>01</span><label for="loginTagInput">ID TRIAXIS</label></div>
-                <input id="loginTagInput" type="text" placeholder="#XXXXX" autocomplete="off" spellcheck="false" maxlength="6">
+                <div class="login-field-head"><span>01</span><label for="loginTagInput">E-MAIL</label></div>
+                <input id="loginTagInput" type="email" placeholder="voce@exemplo.com" autocomplete="email" spellcheck="false" maxlength="254" required>
               </div>
 
               <div class="login-field-card">
                 <div class="login-field-head"><span>02</span><label for="loginPasswordInput">SENHA</label></div>
-                <input id="loginPasswordInput" type="password" placeholder="8 caracteres" autocomplete="current-password" maxlength="8">
+                <input id="loginPasswordInput" type="password" placeholder="Sua senha" autocomplete="current-password" maxlength="72" required>
               </div>
 
               <div class="login-field-card login-field-card--status">
@@ -252,22 +252,19 @@
               </div>
 
               <div class="login-field-card">
-                <div class="login-field-head"><span>02</span><label for="createLoginTagPreview">ID GERADO PELO SISTEMA</label></div>
-                <div class="generated-login-tag generated-login-tag--linked">
-                  <span>ID VINCULADO AO GERADOR TRIAXIS</span>
-                  <strong id="createLoginTagPreview">#-----</strong>
-                  <button id="btnRegenerateLoginTag" class="btn btn-outline btn-sm" type="button">GERAR NOVO ID</button>
-                </div>
+                <div class="login-field-head"><span>02</span><label for="createLoginEmailInput">E-MAIL</label></div>
+                <input id="createLoginEmailInput" type="email" placeholder="voce@exemplo.com" autocomplete="email" spellcheck="false" maxlength="254" required>
+                <small>A tag TriAxis será gerada com segurança pelo servidor.</small>
               </div>
 
               <div class="login-field-card">
                 <div class="login-field-head"><span>03</span><label for="createLoginPasswordInput">SENHA DE ACESSO</label></div>
-                <input id="createLoginPasswordInput" type="password" placeholder="8 caracteres" autocomplete="new-password" maxlength="8">
+                <input id="createLoginPasswordInput" type="password" placeholder="Mínimo de 8 caracteres" autocomplete="new-password" minlength="8" maxlength="72" required>
                 <div class="login-rules">
-                  <span id="createRuleLen">8 caracteres</span>
-                  <span id="createRuleNums">4 números</span>
-                  <span id="createRuleSymbols">2 símbolos</span>
-                  <span id="createRuleLetters">1 maiúscula + 1 minúscula</span>
+                  <span id="createRuleLen">8 ou mais caracteres</span>
+                  <span id="createRuleNums">1 número</span>
+                  <span id="createRuleSymbols">1 símbolo</span>
+                  <span id="createRuleLetters">maiúscula + minúscula</span>
                   <span id="createRuleSeq">sem sequência numérica</span>
                 </div>
               </div>
@@ -858,7 +855,7 @@
         <div class="settings-card hud-frame">
           <span class="hud-corner tl"></span><span class="hud-corner br"></span>
           <h3>MODO DO SISTEMA</h3>
-          <p class="settings-desc">Simulação visual local. No modo Cliente, telas e ações administrativas ficam bloqueadas; volte ao modo Admin pelo botão de simulação.</p>
+          <p class="settings-desc">Controlado pela função da conta no Supabase. Apenas usuários com papel admin podem ativar ferramentas administrativas.</p>
           <select id="modeSelect" class="toolbar-select toolbar-select--full">
             <option value="admin">Modo Admin</option>
             <option value="client">Modo Cliente</option>
@@ -1329,6 +1326,9 @@
 <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
 <script src="assets/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="supabase-auth.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

@@ -33,8 +33,9 @@
   let currentPhysicalVariant = 'standard';
   let validatedPurchaseTag = null;
   let loggedAgentTag = null;
+  let remoteAuthState = { session: null, profile: null, roles: [] };
 
-  const DEFAULT_SETTINGS = { scanlines: true, glitch: true, noise: true, theme: 'classic', mode: 'admin' };
+  const DEFAULT_SETTINGS = { scanlines: true, glitch: true, noise: true, theme: 'classic', mode: 'client' };
 
   const PHYSICAL_ORDER_OPTIONS = {
     material: {
@@ -494,52 +495,9 @@
   async function handleAddProfileSubmit(e) {
     e.preventDefault();
     if (!requireAdminMode()) return;
-    const nameInput = document.getElementById('inputName');
-    const phoneInput = document.getElementById('inputPhone');
-    const passwordInput = document.getElementById('inputAccessPassword');
     const errorEl = document.getElementById('formError');
-    const name = nameInput.value.trim();
-    const phone = phoneInput.value.trim();
-    const password = passwordInput?.value || '';
-    if (!name) { errorEl.textContent = 'INFORME O NOME DO AGENTE'; nameInput.focus(); return; }
-    if (!phone) { errorEl.textContent = 'INFORME O TELEFONE DO AGENTE'; phoneInput.focus(); return; }
-    if (!validateAccessPassword(password).valid) { errorEl.textContent = 'SENHA INVÁLIDA: SIGA O PADRÃO DE 8 CARACTERES INFORMADO.'; passwordInput?.focus(); return; }
-    if (findAgentByTag(currentTag)) { errorEl.textContent = 'ESSA TAG JÁ EXISTE NO BANCO'; return; }
-
-    const now = new Date().toISOString();
-    const agent = normalizeAgent({
-      tag: currentTag,
-      name,
-      phone,
-      photo: tempPhotoBase64 || null,
-      role: document.getElementById('inputRole').value.trim() || 'Agente TriAxis',
-      level: document.getElementById('inputLevel').value,
-      status: document.getElementById('inputStatus').value,
-      notes: document.getElementById('inputNotes').value.trim() || 'REGISTRO INTERNO TRIAXIS',
-      createdAt: now,
-      updatedAt: now
-    });
-
-    ensureAgentQrData(agent);
-    const previousVault = loadPasswordVault();
-    if (!await createPasswordRecord(agent.tag, password)) {
-      errorEl.textContent = 'NÃO FOI POSSÍVEL SALVAR A CREDENCIAL DO AGENTE.';
-      return;
-    }
-    agents.push(agent);
-    if (!saveAgents()) {
-      agents.pop();
-      savePasswordVault(previousVault);
-      errorEl.textContent = 'NAO FOI POSSIVEL SALVAR O AGENTE. REDUZA A FOTO OU LIBERE ESPACO.';
-      return;
-    }
-    addLog(`AGENTE ${agent.tag} REGISTRADO · ${agent.name}`);
-    closeModal('modalAddProfile');
-    showToast(`AGENTE ${agent.tag} REGISTRADO COM SUCESSO`);
-    setCurrentTag(generateUniqueTag());
-    renderAllDynamic();
-    renderLoginState();
-    updateLoginRules();
+    if (errorEl) errorEl.textContent = 'CADASTRO LOCAL DESATIVADO. NOVAS CONTAS DEVEM USAR “CRIAR ID” COM E-MAIL.';
+    showToast('USE O CADASTRO ONLINE EM MEU PERFIL', 'error');
   }
 
   /* ── Busca ────────────────────────────────────────────────────────── */
@@ -1249,15 +1207,12 @@
   }
 
   function getValidatedPurchaseAgent() {
-    return validatedPurchaseTag ? findAgentByTag(validatedPurchaseTag) : null;
+    return getLoggedAgent();
   }
 
   function saveValidatedPurchaseTag(tag) {
-    validatedPurchaseTag = tag || null;
-    try {
-      if (validatedPurchaseTag) localStorage.setItem(PURCHASE_TAG_KEY, validatedPurchaseTag);
-      else localStorage.removeItem(PURCHASE_TAG_KEY);
-    } catch (e) {}
+    validatedPurchaseTag = getLoggedAgent()?.tag || null;
+    try { localStorage.removeItem(PURCHASE_TAG_KEY); } catch (e) {}
   }
 
   function updatePurchaseGateUi() {
@@ -1270,15 +1225,19 @@
     if (status) {
       status.className = `catalog-access-status ${agent ? 'catalog-access-status--ok' : 'catalog-access-status--locked'}`;
       status.textContent = agent
-        ? `TAG VALIDADA // COMPRA LIBERADA · ${agent.name.toUpperCase()} · ${agent.tag}`
-        : 'COMPRAS BLOQUEADAS · AGUARDANDO TAG';
+        ? `SESSÃO AUTENTICADA // SOLICITAÇÃO LIBERADA · ${agent.name.toUpperCase()} · ${agent.tag}`
+        : 'SOLICITAÇÕES BLOQUEADAS · FAÇA LOGIN';
     }
     if (mini) {
       mini.textContent = agent
         ? `AGENTE VINCULADO: ${agent.name.toUpperCase()} · ${agent.tag} · ${agent.level || 'LVL-02'} · ${agent.status || 'Autorizado'}`
-        : 'AGENTE VINCULADO: NENHUM · Valide uma tag autorizada para liberar solicitações.';
+        : 'AGENTE VINCULADO: NENHUM · Entre na sua conta para liberar solicitações.';
     }
-    if (input && agent && !input.value) input.value = agent.tag;
+    if (input) {
+      input.value = agent?.tag || '';
+      input.readOnly = true;
+      input.placeholder = agent ? agent.tag : 'Login necessário';
+    }
 
     const canBuy = Boolean(agent);
     document.querySelectorAll('[data-catalog-config], [data-request-physical], #btnQuoteCreate, #btnRequestPhysicalFromView, #btnConfirmPhysicalRequest, #btnBankModalRequestPhysical, #btnRequestPhysicalFromId').forEach((btn) => {
@@ -1287,7 +1246,7 @@
       btn.classList.toggle('btn-locked', !canBuy);
       btn.setAttribute('aria-disabled', String(!canBuy));
       if (btn.dataset.catalogConfig !== undefined) {
-        btn.title = canBuy ? 'Compra liberada por tag validada' : 'Valide uma tag autorizada para liberar esta solicitação';
+        btn.title = canBuy ? 'Solicitação liberada por sessão autenticada' : 'Faça login para liberar esta solicitação';
         const isFeatured = btn.closest('#catalogFeatured');
         if (!isFeatured) btn.textContent = canBuy ? 'SOLICITAR ARTEFATO' : 'VALIDAÇÃO NECESSÁRIA';
       }
@@ -1295,45 +1254,30 @@
   }
 
   function validatePurchaseTag() {
-    const input = document.getElementById('purchaseTagInput');
-    const raw = input?.value || '';
-    const tag = normalizeTagInput(raw);
-    const agent = findAgentByTag(tag);
-    if (!agent) {
-      saveValidatedPurchaseTag(null);
+    const agent = getLoggedAgent();
+    if (agent) {
       updatePurchaseGateUi();
-      if (input) input.focus();
-      showToast('TAG INVÁLIDA OU NÃO CADASTRADA · COMPRA BLOQUEADA', 'error');
-      return null;
+      showToast(`SESSÃO AUTENTICADA · ${agent.tag}`);
+      return agent;
     }
-    if (agent.status && agent.status !== 'Autorizado') {
-      saveValidatedPurchaseTag(null);
-      updatePurchaseGateUi();
-      showToast(`TAG ${agent.tag} NÃO AUTORIZADA PARA COMPRA`, 'error');
-      return null;
-    }
-    saveValidatedPurchaseTag(agent.tag);
     updatePurchaseGateUi();
-    addLog(`TAG VALIDADA PARA COMPRA · ${agent.tag} · ${agent.name}`);
-    showToast(`COMPRA HABILITADA PARA ${agent.tag}`);
-    return agent;
+    showToast('FAÇA LOGIN PARA SOLICITAR ARTEFATOS', 'error');
+    switchView('profile');
+    openLoginPanel();
+    return null;
   }
 
   function clearPurchaseTagValidation() {
-    saveValidatedPurchaseTag(null);
-    const input = document.getElementById('purchaseTagInput');
-    if (input) input.value = '';
-    updatePurchaseGateUi();
-    showToast('VALIDAÇÃO DE COMPRA REMOVIDA');
+    showToast('A AUTORIZAÇÃO DE COMPRA AGORA SEGUE A SESSÃO DA CONTA');
   }
 
   function requirePurchaseValidation() {
-    const agent = getValidatedPurchaseAgent();
+    const agent = getLoggedAgent();
     if (agent) return agent;
     updatePurchaseGateUi();
-    showToast('ACESSO BLOQUEADO · VALIDE UMA TAG AUTORIZADA ANTES DE SOLICITAR ARTEFATOS', 'error');
-    switchView('catalog');
-    setTimeout(() => document.getElementById('purchaseTagInput')?.focus(), 80);
+    showToast('ACESSO BLOQUEADO · FAÇA LOGIN ANTES DE SOLICITAR ARTEFATOS', 'error');
+    switchView('profile');
+    openLoginPanel();
     return null;
   }
 
@@ -1487,26 +1431,56 @@
     return hash === record.hash;
   }
 
-  function loadLoginSession() {
-    try {
-      const raw = localStorage.getItem(LOGIN_SESSION_KEY);
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed?.tag && findAgentByTag(parsed.tag)) return parsed.tag;
-      localStorage.removeItem(LOGIN_SESSION_KEY);
-    } catch (e) {}
-    return null;
-  }
-
-  function saveLoginSession(tag) {
-    loggedAgentTag = tag || null;
-    try {
-      if (loggedAgentTag) localStorage.setItem(LOGIN_SESSION_KEY, JSON.stringify({ tag: loggedAgentTag, at: new Date().toISOString() }));
-      else localStorage.removeItem(LOGIN_SESSION_KEY);
-    } catch (e) {}
+  function mapRemoteProfileToAgent(profile = remoteAuthState.profile) {
+    if (!profile?.id || !profile?.tag) return null;
+    const isAdmin = remoteAuthState.roles.includes('admin');
+    return normalizeAgent({
+      id: profile.id,
+      tag: profile.tag,
+      name: profile.display_name,
+      phone: profile.phone || '',
+      photo: null,
+      role: isAdmin ? 'Administrador TriAxis' : 'Cliente TriAxis',
+      level: isAdmin ? 'ADMIN' : 'LVL-02',
+      status: profile.status === 'active' ? 'Autorizado' : 'Bloqueado',
+      notes: 'Perfil autenticado pelo Supabase.',
+      createdAt: profile.created_at,
+      updatedAt: profile.updated_at,
+      qrId: profile.tag,
+      qrPayload: `TRIAXIS|AGENT|${profile.tag}`
+    });
   }
 
   function getLoggedAgent() {
-    return loggedAgentTag ? findAgentByTag(loggedAgentTag) : null;
+    return mapRemoteProfileToAgent();
+  }
+
+  function hasRemoteRole(role) {
+    return remoteAuthState.roles.includes(role);
+  }
+
+  function applyRemoteAuthState(state) {
+    remoteAuthState = {
+      session: state?.session || null,
+      profile: state?.profile || null,
+      roles: Array.isArray(state?.roles) ? [...state.roles] : []
+    };
+    const agent = getLoggedAgent();
+    loggedAgentTag = agent?.tag || null;
+    validatedPurchaseTag = agent?.tag || null;
+    try {
+      localStorage.removeItem(LOGIN_SESSION_KEY);
+      localStorage.removeItem(PASSWORD_HASH_KEY);
+      localStorage.removeItem(LOGIN_ATTEMPT_KEY);
+      localStorage.removeItem(PURCHASE_TAG_KEY);
+    } catch (e) {}
+    const settings = loadSettings();
+    settings.mode = hasRemoteRole('admin') ? 'admin' : 'client';
+    saveSettings(settings);
+    applySettings(settings);
+    updatePurchaseGateUi();
+    renderLoginState();
+    renderAllDynamic();
   }
 
   function hasNumberSequence(password) {
@@ -1528,12 +1502,12 @@
     const letters = upper + lower;
     const noSequence = !hasNumberSequence(value);
     return {
-      len: value.length === 8,
-      nums: digits === 4,
-      symbols: symbols === 2,
-      letters: letters === 2 && upper === 1 && lower === 1,
+      len: value.length >= 8 && value.length <= 72,
+      nums: digits >= 1,
+      symbols: symbols >= 1,
+      letters: upper >= 1 && lower >= 1,
       seq: noSequence,
-      valid: value.length === 8 && digits === 4 && symbols === 2 && letters === 2 && upper === 1 && lower === 1 && noSequence
+      valid: value.length >= 8 && value.length <= 72 && digits >= 1 && symbols >= 1 && upper >= 1 && lower >= 1 && noSequence
     };
   }
 
@@ -1586,9 +1560,8 @@
     enterTab?.setAttribute('aria-selected', String(!creating));
     createTab?.setAttribute('aria-selected', String(creating));
     if (creating) {
-      updateCreateLoginTagPreview(false);
       updateCreateIdPasswordRules();
-      setCreateLoginStatus('Preencha nome, ID gerado, senha e telefone para criar o acesso.');
+      setCreateLoginStatus('Preencha nome, e-mail, senha e telefone para criar o acesso.');
       setTimeout(() => document.getElementById('createLoginNameInput')?.focus(), 80);
     } else {
       updateLoginRules();
@@ -1632,9 +1605,11 @@
   async function handleCreateLoginIdSubmit(e) {
     e.preventDefault();
     const nameInput = document.getElementById('createLoginNameInput');
+    const emailInput = document.getElementById('createLoginEmailInput');
     const phoneInput = document.getElementById('createLoginPhoneInput');
     const passInput = document.getElementById('createLoginPasswordInput');
     const name = (nameInput?.value || '').trim();
+    const email = (emailInput?.value || '').trim().toLowerCase();
     const phone = (phoneInput?.value || '').trim();
     const passCheck = updateCreateIdPasswordRules();
 
@@ -1644,8 +1619,14 @@
       nameInput?.focus();
       return;
     }
+    if (!email || !emailInput?.checkValidity()) {
+      setCreateLoginStatus('INFORME UM E-MAIL VÁLIDO.', 'error');
+      showToast('E-MAIL INVÁLIDO', 'error');
+      emailInput?.focus();
+      return;
+    }
     if (!passCheck.valid) {
-      setCreateLoginStatus('SENHA INVÁLIDA · USE 8 CARACTERES: 4 NÚMEROS, 2 SÍMBOLOS E 2 LETRAS, SEM SEQUÊNCIA.', 'error');
+      setCreateLoginStatus('SENHA INVÁLIDA · USE 8 OU MAIS CARACTERES, COM MAIÚSCULA, MINÚSCULA, NÚMERO E SÍMBOLO.', 'error');
       showToast('SENHA FORA DO PADRÃO TRIAXIS', 'error');
       passInput?.focus();
       return;
@@ -1657,60 +1638,41 @@
       return;
     }
 
-    const tag = updateCreateLoginTagPreview(false);
-    if (findAgentByTag(tag)) {
-      setCreateLoginStatus('COLISÃO DE TAG DETECTADA · GERE OUTRA TAG.', 'error');
-      showToast('TAG JÁ EXISTE · GERE OUTRA', 'error');
-      return;
-    }
-
     try {
-      const now = new Date().toISOString();
-      const agent = normalizeAgent({
-        tag,
-        name,
-        phone,
-        photo: null,
-        role: 'Agente TriAxis',
-        level: 'LVL-02',
-        status: 'Autorizado',
-        notes: 'ID criado pelo login TriAxis.',
-        createdAt: now,
-        updatedAt: now
+      if (!window.TriAxisAuth) throw new Error('Serviço de autenticação indisponível');
+      setCreateLoginStatus('CRIANDO CONTA SEGURA...', '');
+      const result = await window.TriAxisAuth.signUp({
+        email,
+        password: passInput?.value || '',
+        displayName: name,
+        phone
       });
-      ensureAgentQrData(agent);
-      agents.push(agent);
-      if (!saveAgents()) {
-        agents.pop();
-        throw new Error('Falha ao persistir agente');
+
+      if (result.session) {
+        setCreateLoginStatus('CONTA CRIADA · SESSÃO AUTENTICADA.', 'ok');
+        showToast('CONTA TRIAXIS CRIADA');
+        closeLoginPanel();
+        switchView('profile');
+      } else {
+        setCreateLoginStatus('CONTA CRIADA · CONFIRME O E-MAIL PARA ENTRAR.', 'ok');
+        showToast('VERIFIQUE SEU E-MAIL PARA ATIVAR A CONTA');
+        setLoginMode('enter');
+        const loginEmail = document.getElementById('loginTagInput');
+        if (loginEmail) loginEmail.value = email;
       }
-      const passwordRecord = await createPasswordRecord(agent.tag, passInput?.value || '');
-      if (!passwordRecord) {
-        agents.pop();
-        saveAgents();
-        throw new Error('Falha ao persistir credencial');
-      }
-      clearLoginAttempts(agent.tag);
-      saveLoginSession(agent.tag);
-      saveValidatedPurchaseTag(agent.tag);
-      updatePurchaseGateUi();
-      addLog(`ID CRIADO PELO LOGIN · ${agent.tag} · ${agent.name}`);
-      setCreateLoginStatus(`ID ${agent.tag} CRIADO · ACESSO LIBERADO.`, 'ok');
-      showToast(`ID CRIADO E LOGIN VALIDADO · ${agent.tag}`);
 
       if (passInput) passInput.value = '';
       if (nameInput) nameInput.value = '';
+      if (emailInput) emailInput.value = '';
       if (phoneInput) phoneInput.value = '';
-      setCurrentTag(generateUniqueTag());
-      updateCreateLoginTagPreview(false);
-      renderAllDynamic();
-      renderLoginState();
-      closeLoginPanel();
-      switchView('profile');
     } catch (err) {
       console.error('Falha ao criar ID pelo login:', err);
-      setCreateLoginStatus('ERRO AO CRIAR ID OU HASH DA SENHA.', 'error');
-      showToast('ERRO AO CRIAR ID PELO LOGIN', 'error');
+      const message = String(err?.message || '').toLowerCase();
+      const friendly = message.includes('already registered')
+        ? 'ESTE E-MAIL JÁ POSSUI UMA CONTA.'
+        : 'NÃO FOI POSSÍVEL CRIAR A CONTA. CONFIRA OS DADOS E TENTE NOVAMENTE.';
+      setCreateLoginStatus(friendly, 'error');
+      showToast(friendly, 'error');
     }
   }
 
@@ -1734,7 +1696,7 @@
     if (tag) tag.textContent = agent ? `${agent.tag} · ${agent.level || 'LVL-02'} · ${agent.status || 'Autorizado'}` : '#-----';
     if (loginButtonText) loginButtonText.textContent = agent ? 'LOGADO' : 'FAZER LOGIN';
     renderUserProfile();
-    if (!agent && !createForm?.hidden) setCreateLoginStatus('Preencha nome, ID gerado, senha e telefone para criar o acesso.');
+    if (!agent && !createForm?.hidden) setCreateLoginStatus('Preencha nome, e-mail, senha e telefone para criar o acesso.');
     if (!agent && !form?.hidden) setLoginStatus('Aguardando credenciais.');
   }
 
@@ -1765,85 +1727,54 @@
 
   async function handleTagLoginSubmit(e) {
     e.preventDefault();
-    const tagInput = document.getElementById('loginTagInput');
+    const emailInput = document.getElementById('loginTagInput');
     const passInput = document.getElementById('loginPasswordInput');
-    const tag = normalizeTagInput(tagInput?.value || '');
-    const agent = findAgentByTag(tag);
-    const passCheck = updateLoginRules();
+    const email = (emailInput?.value || '').trim().toLowerCase();
 
-    if (!agent) {
-      setLoginStatus('TAG INVÁLIDA OU NÃO CADASTRADA.', 'error');
-      showToast('LOGIN BLOQUEADO · TAG NÃO CADASTRADA', 'error');
-      tagInput?.focus();
+    if (!email || !emailInput?.checkValidity()) {
+      setLoginStatus('INFORME UM E-MAIL VÁLIDO.', 'error');
+      emailInput?.focus();
       return;
     }
-    if (agent.status && agent.status !== 'Autorizado') {
-      setLoginStatus(`TAG ${agent.tag} NÃO AUTORIZADA PARA LOGIN.`, 'error');
-      showToast('LOGIN BLOQUEADO · AGENTE NÃO AUTORIZADO', 'error');
-      return;
-    }
-    if (!passCheck.valid) {
-      setLoginStatus('SENHA INVÁLIDA · USE 8 CARACTERES: 4 NÚMEROS, 2 SÍMBOLOS E 2 LETRAS, SEM SEQUÊNCIA.', 'error');
-      showToast('SENHA FORA DO PADRÃO TRIAXIS', 'error');
+    if (!(passInput?.value || '')) {
+      setLoginStatus('INFORME SUA SENHA.', 'error');
       passInput?.focus();
       return;
     }
 
     try {
-      const hasStoredHash = Boolean(getPasswordRecord(agent.tag));
-      const attemptState = getLoginAttemptState(agent.tag);
-      if (hasStoredHash && attemptState.locked) {
-        setLoginStatus(`ACESSO TEMPORARIAMENTE BLOQUEADO · TENTE NOVAMENTE EM ${formatLockTime(attemptState.waitMs)}.`, 'locked');
-        showToast('LOGIN BLOQUEADO · AGUARDE 1 MINUTO', 'error');
-        passInput?.blur();
-        return;
-      }
-
-      if (!hasStoredHash) {
-        setLoginStatus('CREDENCIAL AUSENTE. RESTAURE UM BACKUP COMPLETO OU CRIE UM NOVO ID.', 'error');
-        showToast('LOGIN BLOQUEADO - CREDENCIAL AUSENTE', 'error');
-        return;
-      } else {
-        const passwordOk = await verifyPasswordRecord(agent.tag, passInput?.value || '');
-        if (!passwordOk) {
-          const failedState = registerFailedLoginAttempt(agent.tag);
-          if (failedState.locked) {
-            setLoginStatus('SENHA INCORRETA · 3 TENTATIVAS USADAS. LOGIN BLOQUEADO POR 1 MINUTO.', 'locked');
-            showToast('LOGIN BLOQUEADO POR 1 MINUTO', 'error');
-          } else {
-            setLoginStatus(`SENHA INCORRETA · ${failedState.remaining} TENTATIVA${failedState.remaining === 1 ? '' : 'S'} RESTANTE${failedState.remaining === 1 ? '' : 'S'}.`, 'error');
-            showToast(`LOGIN BLOQUEADO · SENHA INCORRETA · ${failedState.remaining} RESTANTE${failedState.remaining === 1 ? '' : 'S'}`, 'error');
-          }
-          passInput?.focus();
-          return;
-        }
-        clearLoginAttempts(agent.tag);
-        setLoginStatus('HASH VERIFICADO · ACESSO LIBERADO.', 'ok');
-      }
+      if (!window.TriAxisAuth) throw new Error('Serviço de autenticação indisponível');
+      setLoginStatus('VALIDANDO CONTA...', '');
+      const state = await window.TriAxisAuth.signIn(email, passInput?.value || '');
+      const agent = mapRemoteProfileToAgent(state.profile);
+      setLoginStatus('CONTA VERIFICADA · ACESSO LIBERADO.', 'ok');
+      if (emailInput) emailInput.value = email;
+      if (passInput) passInput.value = '';
+      showToast(`LOGIN REALIZADO · ${agent?.tag || 'TRIAXIS'}`);
+      closeLoginPanel();
+      switchView('profile');
     } catch (err) {
-      console.error('Falha na validação de hash:', err);
-      setLoginStatus('ERRO AO VALIDAR HASH DA SENHA.', 'error');
-      showToast('ERRO AO VALIDAR HASH DA SENHA', 'error');
-      return;
+      console.error('Falha no login Supabase:', err);
+      const message = String(err?.message || '').toLowerCase();
+      const friendly = message.includes('email not confirmed')
+        ? 'CONFIRME SEU E-MAIL ANTES DE ENTRAR.'
+        : 'E-MAIL OU SENHA INCORRETOS.';
+      setLoginStatus(friendly, 'error');
+      showToast(friendly, 'error');
+      passInput?.focus();
     }
-
-    saveLoginSession(agent.tag);
-    saveValidatedPurchaseTag(agent.tag);
-    updatePurchaseGateUi();
-    renderCatalog();
-    renderLoginState();
-    if (tagInput) tagInput.value = agent.tag;
-    if (passInput) passInput.value = '';
-    addLog(`LOGIN REALIZADO · ${agent.tag} · ${agent.name}`);
-    showToast(`LOGIN VALIDADO · ${agent.tag}`);
   }
 
-  function logoutAccess() {
+  async function logoutAccess() {
     const agent = getLoggedAgent();
-    if (agent) addLog(`LOGOUT REALIZADO · ${agent.tag}`);
-    saveLoginSession(null);
-    renderLoginState();
-    showToast('LOGIN ENCERRADO');
+    try {
+      await window.TriAxisAuth?.signOut();
+      if (agent) addLog(`LOGOUT REALIZADO · ${agent.tag}`);
+      showToast('LOGIN ENCERRADO');
+    } catch (err) {
+      console.error('Falha ao encerrar sessão:', err);
+      showToast('NÃO FOI POSSÍVEL ENCERRAR A SESSÃO', 'error');
+    }
   }
 
 
@@ -3367,31 +3298,35 @@
   }
 
   function applySettings(settings) {
+    const effectiveMode = hasRemoteRole('admin') && settings.mode === 'admin' ? 'admin' : 'client';
     document.body.classList.toggle('scanlines-off', !settings.scanlines);
     document.body.classList.toggle('glitch-off', !settings.glitch);
     document.body.classList.toggle('noise-off', !settings.noise);
     document.body.dataset.theme = settings.theme || 'classic';
-    document.body.dataset.mode = settings.mode || 'admin';
+    document.body.dataset.mode = effectiveMode;
     setChecked('toggleScanlines', settings.scanlines);
     setChecked('toggleGlitch', settings.glitch);
     setChecked('toggleNoise', settings.noise);
     const themeSelect = document.getElementById('themeSelect');
     if (themeSelect) themeSelect.value = settings.theme || 'classic';
     const modeSelect = document.getElementById('modeSelect');
-    if (modeSelect) modeSelect.value = settings.mode || 'admin';
-    updateTestModeButton(settings.mode || 'admin');
-    if ((settings.mode || 'admin') === 'client' && document.getElementById('catalogAdminPanel')?.classList.contains('active')) {
+    if (modeSelect) {
+      modeSelect.value = effectiveMode;
+      modeSelect.disabled = !hasRemoteRole('admin');
+    }
+    updateTestModeButton(effectiveMode);
+    if (effectiveMode === 'client' && document.getElementById('catalogAdminPanel')?.classList.contains('active')) {
       setCatalogPanel('storefront');
     }
   }
 
   function isClientSimulationMode() {
-    return loadSettings().mode === 'client';
+    return !hasRemoteRole('admin') || loadSettings().mode === 'client';
   }
 
   function requireAdminMode() {
-    if (!isClientSimulationMode()) return true;
-    showToast('ACAO ADMINISTRATIVA BLOQUEADA NA SIMULACAO DE CLIENTE', 'error');
+    if (hasRemoteRole('admin') && !isClientSimulationMode()) return true;
+    showToast('AÇÃO ADMINISTRATIVA BLOQUEADA · CONTA ADMIN NECESSÁRIA', 'error');
     return false;
   }
 
@@ -3400,10 +3335,17 @@
     const btn = document.getElementById('btnTestMode');
     const normalized = mode === 'client' ? 'client' : 'admin';
     if (label) label.textContent = normalized === 'client' ? 'CLIENTE' : 'ADMIN';
-    if (btn) btn.setAttribute('aria-label', normalized === 'client' ? 'Voltar para modo admin' : 'Alternar para modo cliente');
+    if (btn) {
+      btn.hidden = !hasRemoteRole('admin');
+      btn.setAttribute('aria-label', normalized === 'client' ? 'Voltar para modo admin' : 'Alternar para modo cliente');
+    }
   }
 
   function toggleTestMode() {
+    if (!hasRemoteRole('admin')) {
+      showToast('ALTERAÇÃO DE MODO EXCLUSIVA PARA ADMINISTRADOR', 'error');
+      return;
+    }
     const settings = loadSettings();
     settings.mode = (settings.mode || 'admin') === 'client' ? 'admin' : 'client';
     saveSettings(settings);
@@ -3914,13 +3856,14 @@
 
 
   /* ── Inicialização ───────────────────────────────────────────────── */
-  function init() {
+  async function init() {
     agents = loadAgents();
-    validatedPurchaseTag = loadValidatedPurchaseTag();
-    loggedAgentTag = loadLoginSession();
+    validatedPurchaseTag = null;
+    loggedAgentTag = null;
     physicalRequests = loadPhysicalIdRequests();
     loadCatalogAdminState();
     const settings = loadSettings();
+    settings.mode = 'client';
     applySettings(settings);
     setCurrentTag(generateUniqueTag());
 
@@ -4029,10 +3972,8 @@
     document.getElementById('createLoginPhoneInput')?.addEventListener('input', (e) => { e.target.value = maskPhone(e.target.value); });
     document.getElementById('loginPasswordInput')?.addEventListener('input', updateLoginRules);
     document.getElementById('loginTagInput')?.addEventListener('input', (e) => {
-      e.target.value = normalizeTagInput(e.target.value).slice(0, 6);
-      const state = getLoginAttemptState(e.target.value);
-      if (state.locked) setLoginStatus(`TAG BLOQUEADA TEMPORARIAMENTE · TENTE EM ${formatLockTime(state.waitMs)}.`, 'locked');
-      else if (!getLoggedAgent()) setLoginStatus('Aguardando credenciais.');
+      e.target.value = String(e.target.value || '').trimStart().toLowerCase();
+      if (!getLoggedAgent()) setLoginStatus('Aguardando credenciais.');
     });
     document.getElementById('btnLogoutAccess')?.addEventListener('click', logoutAccess);
     document.getElementById('btnOpenLoggedProfile')?.addEventListener('click', () => { closeLoginPanel(); switchView('profile'); });
@@ -4045,6 +3986,16 @@
     setCatalogPanel('storefront');
     renderLoginState();
     updateLoginRules();
+
+    try {
+      if (!window.TriAxisAuth) throw new Error('Cliente Supabase não carregado');
+      await window.TriAxisAuth.initialize(applyRemoteAuthState);
+    } catch (err) {
+      console.error('Falha ao iniciar autenticação Supabase:', err);
+      applyRemoteAuthState({ session: null, profile: null, roles: [] });
+      setLoginStatus('SERVIÇO DE LOGIN TEMPORARIAMENTE INDISPONÍVEL.', 'error');
+      showToast('LOGIN ONLINE INDISPONÍVEL', 'error');
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);
