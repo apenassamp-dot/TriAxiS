@@ -4046,6 +4046,7 @@ body:not(.glitch-off) .nexus-home-content{
 body[data-mode="client"] .nav-item[data-view="bank"],
 body[data-mode="client"] .nav-item[data-view="production"],
 body[data-mode="client"] .nav-item[data-view="settings"]{ display:none; }
+body[data-mode="client"][data-production-access="true"] .nav-item[data-view="production"]{ display:flex; }
 body[data-mode="client"] .sidebar-tagline small::after{ content:' · CLIENT MODE'; color:var(--c-red); }
 
 .toolbar-input--full{ width:100%; min-width:0; }

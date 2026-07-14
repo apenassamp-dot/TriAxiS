@@ -2,6 +2,8 @@
   'use strict';
 
   const PRODUCT_BUCKET = 'product-images';
+  const SIGNED_URL_TTL_SECONDS = 3600;
+  const SIGNED_URL_REFRESH_MS = 45 * 60 * 1000;
 
   function requireClient() {
     if (!window.TriAxisAuth?.getClient) throw new Error('CATALOG_AUTH_NOT_INITIALIZED');
@@ -28,12 +30,14 @@
     return Array.isArray(value) ? value.filter(Boolean) : [];
   }
 
-  function mapRemoteProduct(row) {
+  function mapRemoteProduct(row, signedImages = []) {
     const metadata = objectValue(row.metadata);
     const customization = objectValue(row.customization);
-    const gallery = listValue(metadata.gallery);
-    const img = String(metadata.img || gallery[0] || 'assets/cybershape-unit.png');
+    const storedGallery = listValue(metadata.gallery).filter((source) => !storagePathFromPublicUrl(source));
+    const gallery = [...signedImages, ...storedGallery];
+    const img = String(signedImages[0] || metadata.img || gallery[0] || 'assets/cybershape-unit.png');
     return {
+      remoteId: row.id,
       id: String(metadata.catalog_id || row.slug || '').replace(/-/g, '_'),
       name: row.name,
       line: metadata.line || 'TRIAXIS PRODUCT',
@@ -72,12 +76,31 @@
   }
 
   function storagePathFromPublicUrl(source) {
+    if (String(source || '').startsWith('storage://')) return String(source).slice('storage://'.length);
     const marker = `/storage/v1/object/public/${PRODUCT_BUCKET}/`;
+    const signedMarker = `/storage/v1/object/sign/${PRODUCT_BUCKET}/`;
     const value = String(source || '');
-    const index = value.indexOf(marker);
+    const index = value.includes(marker) ? value.indexOf(marker) : value.indexOf(signedMarker);
     if (index < 0) return null;
-    const path = decodeURIComponent(value.slice(index + marker.length));
+    const activeMarker = value.includes(marker) ? marker : signedMarker;
+    const path = decodeURIComponent(value.slice(index + activeMarker.length).split('?')[0]);
     return path.startsWith('catalog/') ? path : null;
+  }
+
+  async function removeUnlinkedUploads(paths) {
+    const candidates = Array.from(new Set(paths.filter(Boolean)));
+    if (!candidates.length) return;
+    const api = requireClient();
+    const { data, error } = await api.from('product_images').select('storage_path').in('storage_path', candidates);
+    if (error) {
+      console.error('Cleanup adiado: não foi possível confirmar vínculos das imagens:', error);
+      return;
+    }
+    const linked = new Set((data || []).map((row) => row.storage_path));
+    const orphanPaths = candidates.filter((path) => !linked.has(path));
+    if (!orphanPaths.length) return;
+    const { error: cleanupError } = await api.storage.from(PRODUCT_BUCKET).remove(orphanPaths);
+    if (cleanupError) console.error('Falha ao remover uploads órfãos do catálogo:', cleanupError);
   }
 
   async function uploadDataImage(source, slug, index) {
@@ -96,23 +119,34 @@
       upsert: false
     });
     if (error) throw error;
-    const { data } = api.storage.from(PRODUCT_BUCKET).getPublicUrl(path);
-    if (!data?.publicUrl) throw new Error('CATALOG_IMAGE_URL_MISSING');
-    return { url: data.publicUrl, path };
+    const { data, error: signedError } = await api.storage.from(PRODUCT_BUCKET).createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+    if (signedError || !data?.signedUrl) {
+      await api.storage.from(PRODUCT_BUCKET).remove([path]).catch(() => {});
+      throw signedError || new Error('CATALOG_IMAGE_URL_MISSING');
+    }
+    return { url: data.signedUrl, path, uploaded: true };
   }
 
   async function prepareProduct(record) {
     const slug = toDatabaseSlug(record.id || record.name);
     const sources = Array.from(new Set([record.img, ...(record.gallery || [])].filter(Boolean)));
     const uploaded = new Map();
-    for (let index = 0; index < sources.length; index += 1) {
-      uploaded.set(sources[index], await uploadDataImage(sources[index], slug, index));
+    try {
+      for (let index = 0; index < sources.length; index += 1) {
+        uploaded.set(sources[index], await uploadDataImage(sources[index], slug, index));
+      }
+    } catch (error) {
+      const orphanPaths = Array.from(uploaded.values()).filter((item) => item?.uploaded).map((item) => item.path);
+      await removeUnlinkedUploads(orphanPaths);
+      throw error;
     }
     const gallery = sources.map((source) => uploaded.get(source)?.url || source);
     const img = uploaded.get(record.img)?.url || gallery[0] || 'assets/cybershape-unit.png';
     const storagePaths = sources.map((source) => uploaded.get(source)?.path).filter(Boolean);
+    const uploadedPaths = sources.map((source) => uploaded.get(source)).filter((item) => item?.uploaded).map((item) => item.path);
     return {
       local: { ...record, img, gallery },
+      uploadedPaths,
       remote: {
         slug,
         name: String(record.name || '').trim(),
@@ -156,13 +190,22 @@
   async function load() {
     const api = requireClient();
     const [productsResult, settingsResult] = await Promise.all([
-      api.from('products').select('id, slug, name, description, base_price, status, published, customization, metadata, updated_at'),
+      api.from('products').select('id, slug, name, description, base_price, status, published, customization, metadata, updated_at, product_images(storage_path, sort_order)'),
       api.from('catalog_settings').select('layout').eq('id', 'main').maybeSingle()
     ]);
     if (productsResult.error) throw productsResult.error;
     if (settingsResult.error) throw settingsResult.error;
     return {
-      products: (productsResult.data || []).map(mapRemoteProduct).sort((a, b) => a.priority - b.priority),
+      products: await Promise.all((productsResult.data || []).map(async (row) => {
+        const paths = listValue(row.product_images).sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+        const signedImages = [];
+        for (const image of paths) {
+          const { data, error } = await api.storage.from(PRODUCT_BUCKET).createSignedUrl(image.storage_path, SIGNED_URL_TTL_SECONDS);
+          if (error) throw error;
+          if (data?.signedUrl) signedImages.push(data.signedUrl);
+        }
+        return mapRemoteProduct(row, signedImages);
+      })).then((products) => products.sort((a, b) => a.priority - b.priority)),
       layout: settingsResult.data?.layout || null
     };
   }
@@ -171,18 +214,24 @@
     requireAdmin();
     if (!Array.isArray(state?.products) || !state.products.length) throw new Error('CATALOG_EMPTY');
     const prepared = [];
-    for (const product of state.products) prepared.push(await prepareProduct(product));
     const api = requireClient();
-    const { error } = await api.rpc('sync_catalog', {
-      catalog_data: prepared.map((item) => item.remote),
-      layout_data: objectValue(state.layout)
-    });
-    if (error) throw error;
-    return {
-      products: prepared.map((item) => item.local),
-      layout: state.layout
-    };
+    try {
+      for (const product of state.products) prepared.push(await prepareProduct(product));
+      const { error } = await api.rpc('sync_catalog', {
+        catalog_data: prepared.map((item) => item.remote),
+        layout_data: objectValue(state.layout)
+      });
+      if (error) throw error;
+      return {
+        products: prepared.map((item) => item.local),
+        layout: state.layout
+      };
+    } catch (error) {
+      const orphanPaths = prepared.flatMap((item) => item.uploadedPaths || []);
+      await removeUnlinkedUploads(orphanPaths);
+      throw error;
+    }
   }
 
-  window.TriAxisCatalog = Object.freeze({ load, sync });
+  window.TriAxisCatalog = Object.freeze({ load, sync, signedUrlRefreshMs: SIGNED_URL_REFRESH_MS });
 })();

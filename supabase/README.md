@@ -63,5 +63,24 @@ papéis podem ser administrados pela função protegida `set_user_role`.
 4. Altere um produto no painel e abra o site em outro navegador.
 5. Confirme que a alteração aparece no segundo navegador.
 
-Imagens já distribuídas em `assets/` continuam sendo usadas pelo site. Novas
-imagens enviadas pelo editor são gravadas no bucket público `product-images`.
+Imagens já distribuídas em `assets/` continuam sendo usadas pelo site. Depois da
+migração 003, novas imagens ficam no bucket privado `product-images` e são lidas
+por URL assinada somente quando pertencem a produto publicado ou por admin ativo.
+
+## Hardening 003
+
+Depois das migrações 001 e 002, execute `migrations/003_security_orders_storage.sql`
+uma única vez no SQL Editor. Ela não apaga pedidos nem imagens e adiciona:
+
+- bloqueio de papéis e dados protegidos para perfil suspenso;
+- pedidos autoritativos no banco, com idempotência, limites e rate limit;
+- criação do pedido e item na mesma transação;
+- bucket de produtos privado e leitura alinhada à publicação do produto.
+
+## Política de senha no painel
+
+A política do Supabase Auth não é controlada por migration SQL. Em
+**Authentication > Providers > Email > Password security**, configure no mínimo
+12 caracteres e, quando disponível no plano, proteção contra senhas vazadas.
+Mantenha confirmação de e-mail habilitada. Não considere isso aplicado antes de
+salvar e confirmar a configuração no painel.

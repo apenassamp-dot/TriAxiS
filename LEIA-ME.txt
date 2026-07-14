@@ -12,10 +12,10 @@ Já usam Supabase:
 - papéis customer, production, support e admin;
 - políticas RLS no banco.
 - catálogo, produtos, imagens novas e configuração da vitrine (após a migração 002).
+- pedidos e produção online protegidos por RLS (após a migração 003).
 
 Ainda usam dados locais nesta etapa:
-- pedidos e produção;
-- painel de agentes legado;
+- painel de agentes legado isolado, sem ser fonte de autenticação ou pedidos;
 - configurações visuais e logs locais.
 
 COMO ABRIR
@@ -44,6 +44,7 @@ RECUPERAÇÃO DE SENHA
 
 BANCO
 - A migração inicial está em supabase/migrations/001_initial_schema.sql.
+- O hardening de acesso, pedidos e imagens está em supabase/migrations/003_security_orders_storage.sql.
 - Instruções de aplicação e promoção do primeiro admin estão em supabase/README.md.
 - Nunca coloque service_role, sb_secret, senha do banco ou token pessoal no frontend.
 
@@ -60,4 +61,5 @@ ARQUIVOS PRINCIPAIS
 SEGURANÇA
 - A chave sb_publishable é pública por definição e depende das políticas RLS.
 - Operações administrativas não devem usar service_role no navegador.
-- Pedidos serão migrados nas próximas etapas.
+- Pedidos reais vêm do Supabase. Dados legados só são removidos depois de exportação criptografada e confirmação explícita; cancelar preserva os dados e bloqueia sua renderização.
+- GitHub Pages não envia cabeçalho anti-clickjacking; SDK sem SRI e style-src unsafe-inline também permanecem riscos residuais documentados em REVISAO_SEGURANCA_2026-07-14.md.

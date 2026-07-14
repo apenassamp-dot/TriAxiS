@@ -15,6 +15,8 @@
   const LOGIN_SESSION_KEY = 'triaxis_login_session';
   const PASSWORD_HASH_KEY = 'triaxis_agent_password_hashes';
   const LOGIN_ATTEMPT_KEY = 'triaxis_login_attempts';
+  const LEGACY_AGENTS_KEY = 'triaxis_legacy_agents_v1';
+  const LEGACY_REQUESTS_KEY = 'triaxis_legacy_physical_requests_v1';
   const LOGIN_MAX_ATTEMPTS = 3;
   const LOGIN_LOCK_MS = 60 * 1000;
   const MAX_PHOTO_FILE_BYTES = 8 * 1024 * 1024;
@@ -38,7 +40,14 @@
   let passwordRecoveryLinkError = false;
   let passwordRecoveryUrlProcessing = false;
   let passwordResetRequestPending = false;
+  let passwordResetCooldownUntil = 0;
   let passwordUpdatePending = false;
+  let orderSubmissionPending = false;
+  let orderRefreshSequence = 0;
+  let previousRemoteUserId = null;
+  let physicalOrderIntentId = null;
+  let catalogOrderIntentId = null;
+  let catalogSignedRefreshTimer = null;
 
   const DEFAULT_SETTINGS = { scanlines: true, glitch: true, noise: true, theme: 'classic', mode: 'client' };
 
@@ -170,12 +179,9 @@
   /* ── Persistência ─────────────────────────────────────────────────── */
   function loadAgents() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      const normalized = Array.isArray(parsed) ? parsed.map(normalizeAgent) : [];
-      const migrated = migrateAgentQrData(normalized);
-      if (JSON.stringify(normalized) !== JSON.stringify(migrated)) localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LEGACY_AGENTS_KEY);
+      return [];
     } catch (e) {
       console.error('Falha ao carregar banco de agentes:', e);
       return [];
@@ -184,7 +190,7 @@
 
   function saveAgents() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(agents));
+      localStorage.removeItem(STORAGE_KEY);
       return true;
     } catch (e) {
       console.error('Falha ao salvar banco de agentes:', e);
@@ -208,7 +214,8 @@
 
   function loadLog() {
     try {
-      const raw = localStorage.getItem(LOG_KEY);
+      localStorage.removeItem(LOG_KEY);
+      const raw = sessionStorage.getItem(LOG_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
       return Array.isArray(parsed) ? parsed : [];
     } catch (e) {
@@ -217,7 +224,7 @@
   }
 
   function saveLog(log) {
-    localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(0, 80)));
+    sessionStorage.setItem(LOG_KEY, JSON.stringify(log.slice(0, 80)));
   }
 
   function addLog(message) {
@@ -248,9 +255,9 @@
 
   function loadPhysicalIdRequests() {
     try {
-      const raw = localStorage.getItem(PHYSICAL_REQUESTS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.map(normalizePhysicalRequest) : [];
+      localStorage.removeItem(PHYSICAL_REQUESTS_KEY);
+      localStorage.removeItem(LEGACY_REQUESTS_KEY);
+      return [];
     } catch (e) {
       console.error('Falha ao carregar solicitações físicas:', e);
       return [];
@@ -259,7 +266,7 @@
 
   function savePhysicalIdRequests() {
     try {
-      localStorage.setItem(PHYSICAL_REQUESTS_KEY, JSON.stringify(physicalRequests));
+      localStorage.removeItem(PHYSICAL_REQUESTS_KEY);
       return true;
     } catch (e) {
       console.error('Falha ao salvar solicitações físicas:', e);
@@ -271,6 +278,9 @@
   function normalizePhysicalRequest(request) {
     return {
       id: request.id || `REQ-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      remote: request.remote === true,
+      remoteStatus: request.remoteStatus || '',
+      remoteProductId: request.remoteProductId || null,
       tag: request.tag || '#-----',
       name: request.name || 'Agente sem nome',
       phone: request.phone || '—',
@@ -403,8 +413,11 @@
 
   /* ── Navegação / modais ───────────────────────────────────────────── */
   function switchView(viewName) {
-    if (isClientSimulationMode() && ['bank', 'production', 'settings'].includes(viewName)) {
-      showToast('INDISPONIVEL NA SIMULACAO DE CLIENTE', 'error');
+    const adminOnly = ['bank', 'settings'].includes(viewName);
+    const productionOnly = viewName === 'production';
+    if ((adminOnly && (!hasRemoteRole('admin') || isClientSimulationMode())) ||
+      (productionOnly && (!canAccessProduction() || (hasRemoteRole('admin') && isClientSimulationMode())))) {
+      showToast('ACESSO NAO AUTORIZADO PARA ESTA FUNCAO', 'error');
       viewName = 'home';
     }
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
@@ -431,6 +444,14 @@
 
   function closeModal(id) {
     const modal = document.getElementById(id);
+    if (id === 'modalPhysicalId' && physicalOrderIntentId) {
+      void window.TriAxisOrders?.cancelIntent?.(physicalOrderIntentId)?.catch((error) => console.error('Falha ao reconciliar intenção física:', error));
+      physicalOrderIntentId = null;
+    }
+    if (id === 'modalCatalogConfig' && catalogOrderIntentId) {
+      void window.TriAxisOrders?.cancelIntent?.(catalogOrderIntentId)?.catch((error) => console.error('Falha ao reconciliar intenção de catálogo:', error));
+      catalogOrderIntentId = null;
+    }
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
   }
@@ -504,6 +525,8 @@
 
   /* ── Busca ────────────────────────────────────────────────────────── */
   function findAgentByTag(tag) {
+    const logged = getLoggedAgent();
+    if (logged?.tag === tag) return logged;
     return agents.find((a) => a.tag === tag) || null;
   }
 
@@ -1096,36 +1119,48 @@
     openModal('modalPhysicalId');
   }
 
-  function requestPhysicalId(tag) {
+  async function requestPhysicalId(tag) {
+    if (orderSubmissionPending) return;
     const validatedAgent = requirePurchaseValidation();
     if (!validatedAgent) return;
     const agent = findAgentByTag(validatedAgent.tag);
     if (!agent) { showToast('AGENTE NÃO ENCONTRADO', 'error'); return; }
     const notes = document.getElementById('physicalRequestNotes')?.value.trim() || '';
     const order = getPhysicalOrderSelection();
-    const existingOpen = physicalRequests.find(r => r.tag === agent.tag && r.status !== 'Entregue');
-    if (existingOpen && !confirm('Já existe uma solicitação aberta para este agente. Criar outra mesmo assim?')) return;
-    const request = normalizePhysicalRequest({
-      id: `REQ-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-      tag: agent.tag,
-      name: agent.name,
-      phone: agent.phone,
-      qrId: agent.qrId,
-      requestedAt: new Date().toISOString(),
-      status: 'Pendente',
-      notes,
-      ...order
-    });
-    physicalRequests.unshift(request);
-    if (!savePhysicalIdRequests()) {
-      physicalRequests.shift();
+    const product = getCatalogProduct(order.productId);
+    if (!product?.remoteId || !window.TriAxisOrders) {
+      showToast('CATÁLOGO ONLINE AINDA NÃO ESTÁ PRONTO. ATUALIZE E TENTE NOVAMENTE.', 'error');
       return;
     }
-    closeModal('modalPhysicalId');
-    addLog(`SOLICITAÇÃO DE ID FÍSICO · ${agent.tag} · ${formatCurrencyBRL(order.estimatedPrice)}`);
-    renderPhysicalIdView();
-    renderProduction();
-    showToast('SOLICITAÇÃO DE ID FÍSICO REGISTRADA');
+    const existingOpen = physicalRequests.find(r => r.tag === agent.tag && r.status !== 'Entregue');
+    if (existingOpen && !confirm('Já existe uma solicitação aberta para este agente. Criar outra mesmo assim?')) return;
+    orderSubmissionPending = true;
+    try {
+      physicalOrderIntentId = `physical:${agent.id || agent.tag}:${product.remoteId}`;
+      await window.TriAxisOrders.submit({
+        productId: product.remoteId,
+        quantity: 1,
+        intentId: physicalOrderIntentId,
+        notes,
+        configuration: {
+          variant: order.productVariant,
+          material: order.material,
+          finish: order.finish,
+          accessory: order.accessory,
+          origin: 'id_fisico',
+          deadline: product.productionTime || 'sob_consulta'
+        }
+      });
+      closeModal('modalPhysicalId');
+      await refreshOrdersFromSupabase();
+      renderPhysicalIdView();
+      showToast('SOLICITAÇÃO DE ID FÍSICO REGISTRADA');
+    } catch (error) {
+      console.error('Falha ao registrar pedido online:', error);
+      showToast('NÃO FOI POSSÍVEL REGISTRAR O PEDIDO. TENTE NOVAMENTE.', 'error');
+    } finally {
+      orderSubmissionPending = false;
+    }
   }
 
   function renderPhysicalRequests() {
@@ -1151,37 +1186,45 @@
           <p><b>Estimativa</b><span>${formatCurrencyBRL(req.estimatedPrice)}</span></p>
           ${req.notes ? `<p><b>Obs.</b><span>${escapeHtml(req.notes)}</span></p>` : ''}
         </div>
-        <select class="toolbar-select" data-request-status="${escapeHtml(req.id)}">${renderPhysicalStatusOptions(req.status)}</select>
+        <select class="toolbar-select" data-request-status="${escapeHtml(req.id)}" ${hasRemoteRole('admin') || hasRemoteRole('production') ? '' : 'disabled'}>${renderPhysicalStatusOptions(req)}</select>
         <button class="btn btn-outline btn-sm" data-open-id="${escapeHtml(req.tag)}" type="button">ABRIR ID</button>
-        <button class="btn btn-danger btn-sm" data-remove-request="${escapeHtml(req.id)}" type="button">REMOVER</button>
+        ${req.remote ? '' : `<button class="btn btn-danger btn-sm" data-remove-request="${escapeHtml(req.id)}" type="button">REMOVER</button>`}
       </div>`).join('');
     list.querySelectorAll('[data-request-status]').forEach(sel => sel.addEventListener('change', () => updatePhysicalRequestStatus(sel.getAttribute('data-request-status'), sel.value)));
     list.querySelectorAll('[data-open-id]').forEach(btn => btn.addEventListener('click', () => openIdCard(btn.getAttribute('data-open-id'))));
     list.querySelectorAll('[data-remove-request]').forEach(btn => btn.addEventListener('click', () => removePhysicalRequest(btn.getAttribute('data-remove-request'))));
   }
 
-  function updatePhysicalRequestStatus(requestId, status) {
-    if (!requireAdminMode()) return;
-    const req = physicalRequests.find(r => r.id === requestId);
-    if (!req) return;
-    const previousStatus = req.status;
-    req.status = status;
-    if (!savePhysicalIdRequests()) {
-      req.status = previousStatus;
-      renderPhysicalRequests();
-      renderProduction();
+  async function updatePhysicalRequestStatus(requestId, status) {
+    if (!hasRemoteRole('admin') && !hasRemoteRole('production')) {
+      showToast('PERMISSÃO DE PRODUÇÃO NECESSÁRIA', 'error');
       return;
     }
-    addLog(`STATUS ID FÍSICO · ${req.tag} · ${status}`);
-    renderPhysicalRequests();
-    renderProduction();
-    showToast('STATUS DA SOLICITAÇÃO ATUALIZADO');
+    const req = physicalRequests.find(r => r.id === requestId);
+    const remoteStatus = window.TriAxisOrders?.statusFromLabel(status);
+    if (!req?.remote || !remoteStatus) {
+      showToast('PEDIDO LOCAL LEGADO NÃO PODE ALTERAR A PRODUÇÃO REAL', 'error');
+      return;
+    }
+    try {
+      await window.TriAxisOrders.setStatus(req.id, remoteStatus);
+      await refreshOrdersFromSupabase();
+      showToast('STATUS DA SOLICITAÇÃO ATUALIZADO');
+    } catch (error) {
+      console.error('Falha ao atualizar status online:', error);
+      await refreshOrdersFromSupabase();
+      showToast('TRANSIÇÃO DE STATUS NÃO PERMITIDA', 'error');
+    }
   }
 
   function removePhysicalRequest(requestId) {
     if (!requireAdminMode()) return;
     const req = physicalRequests.find(r => r.id === requestId);
     if (!req) return;
+    if (req.remote) {
+      showToast('PEDIDOS REAIS NÃO PODEM SER APAGADOS; USE O STATUS CANCELADO.', 'error');
+      return;
+    }
     if (!confirm(`Remover solicitação física de ${req.name} (${req.tag})?`)) return;
     const previousRequests = physicalRequests;
     physicalRequests = physicalRequests.filter(r => r.id !== requestId);
@@ -1461,7 +1504,67 @@
     return remoteAuthState.roles.includes(role);
   }
 
+  function canAccessProduction() {
+    return hasRemoteRole('admin') || hasRemoteRole('production');
+  }
+
+  function legacyPiiKeys() {
+    return [STORAGE_KEY, PHYSICAL_REQUESTS_KEY, LEGACY_AGENTS_KEY, LEGACY_REQUESTS_KEY, LOGIN_SESSION_KEY, PASSWORD_HASH_KEY, LOGIN_ATTEMPT_KEY, PURCHASE_TAG_KEY, LOG_KEY];
+  }
+
+  function clearRuntimeLocalPii() {
+    try { legacyPiiKeys().forEach((key) => localStorage.removeItem(key)); } catch (error) {}
+    try { sessionStorage.removeItem(LOG_KEY); } catch (error) {}
+  }
+
+  async function remediateLegacyLocalPii() {
+    const snapshot = getStorageSnapshot(legacyPiiKeys());
+    if (!Object.values(snapshot).some((value) => value !== null)) return true;
+    if (!confirm('MIGRAÇÃO DE SEGURANÇA: existem dados pessoais locais legados. Clique OK para criar um backup criptografado antes da remoção. Cancelar preserva os dados, bloqueia o aplicativo e não os mostra na tela.')) {
+      document.body.dataset.legacyMigrationBlocked = 'true';
+      alert('Migração cancelada. Os dados foram preservados localmente e o aplicativo permanecerá bloqueado até a exportação segura.');
+      return false;
+    }
+    const password = prompt('Crie uma senha forte para o backup legado (mínimo de 12 caracteres):');
+    if (!password || password.length < 12 || prompt('Confirme a senha do backup legado:') !== password) {
+      document.body.dataset.legacyMigrationBlocked = 'true';
+      alert('Backup não criado. Os dados foram preservados e o aplicativo permanece bloqueado.');
+      return false;
+    }
+    try {
+      const envelope = await encryptBackupPayload({ version: 5, kind: 'triaxis-legacy-export', exportedAt: new Date().toISOString(), rawStorage: snapshot }, password);
+      downloadEncryptedBackup(envelope, `triaxis-legacy-encrypted-${Date.now()}.json`);
+    } catch (error) {
+      console.error('Falha ao criptografar dados legados:', error);
+      document.body.dataset.legacyMigrationBlocked = 'true';
+      alert('Falha ao criar backup. Nenhum dado foi removido e o aplicativo permanece bloqueado.');
+      return false;
+    }
+    if (!confirm('Confirme que o arquivo criptografado foi gerado/baixado. Somente então os dados locais legados serão apagados.')) {
+      document.body.dataset.legacyMigrationBlocked = 'true';
+      alert('Remoção cancelada. Os dados continuam preservados localmente.');
+      return false;
+    }
+    clearRuntimeLocalPii();
+    return true;
+  }
+
   function applyRemoteAuthState(state) {
+    const nextUserId = state?.session?.user?.id || null;
+    const userChanged = previousRemoteUserId !== null && previousRemoteUserId !== nextUserId;
+    if (userChanged) {
+      ++orderRefreshSequence;
+      physicalRequests = [];
+      agents = [];
+      currentPhysicalTag = null;
+      validatedPurchaseTag = null;
+      loggedAgentTag = null;
+      window.TriAxisOrders?.clearAllIntents?.();
+      renderPhysicalRequests();
+      renderProduction();
+      renderUserProfile();
+    }
+    previousRemoteUserId = nextUserId;
     remoteAuthState = {
       session: state?.session || null,
       profile: state?.profile || null,
@@ -1470,12 +1573,13 @@
     const agent = getLoggedAgent();
     loggedAgentTag = agent?.tag || null;
     validatedPurchaseTag = agent?.tag || null;
-    try {
-      localStorage.removeItem(LOGIN_SESSION_KEY);
-      localStorage.removeItem(PASSWORD_HASH_KEY);
-      localStorage.removeItem(LOGIN_ATTEMPT_KEY);
-      localStorage.removeItem(PURCHASE_TAG_KEY);
-    } catch (e) {}
+    if (!remoteAuthState.session?.user?.id) {
+      physicalRequests = [];
+      window.TriAxisOrders?.clearAllIntents?.();
+      try { sessionStorage.removeItem(LOG_KEY); } catch (e) {}
+    } else {
+      window.TriAxisOrders?.purgeExpiredIntents?.();
+    }
     const settings = loadSettings();
     settings.mode = hasRemoteRole('admin') ? 'admin' : 'client';
     saveSettings(settings);
@@ -1484,6 +1588,34 @@
     renderLoginState();
     renderAllDynamic();
     void refreshCatalogFromSupabase();
+    void refreshOrdersFromSupabase();
+  }
+
+  async function refreshOrdersFromSupabase() {
+    const sequence = ++orderRefreshSequence;
+    if (!remoteAuthState.session?.user?.id || !window.TriAxisOrders) {
+      physicalRequests = [];
+      renderPhysicalRequests();
+      renderProduction();
+      renderUserProfile();
+      return false;
+    }
+    try {
+      const orders = await window.TriAxisOrders.load();
+      if (sequence !== orderRefreshSequence) return false;
+      physicalRequests = Array.isArray(orders) ? orders.map(normalizePhysicalRequest) : [];
+      renderPhysicalRequests();
+      renderProduction();
+      renderUserProfile();
+      return true;
+    } catch (error) {
+      console.error('Falha ao carregar pedidos protegidos pelo Supabase:', error);
+      if (sequence === orderRefreshSequence) physicalRequests = [];
+      renderPhysicalRequests();
+      renderProduction();
+      renderUserProfile();
+      return false;
+    }
   }
 
   function hasNumberSequence(password) {
@@ -1749,6 +1881,10 @@
     const emailInput = document.getElementById('loginTagInput');
     const button = document.getElementById('btnForgotPassword');
     const email = String(emailInput?.value || '').trim().toLowerCase();
+    if (Date.now() < passwordResetCooldownUntil) {
+      setLoginStatus('AGUARDE UM INSTANTE ANTES DE SOLICITAR OUTRO LINK.', 'error');
+      return;
+    }
     if (!isValidSignupEmail(email) || !emailInput?.checkValidity()) {
       setLoginStatus('INFORME SEU E-MAIL PARA RECEBER O LINK DE RECUPERAÇÃO.', 'error');
       emailInput?.focus();
@@ -1761,14 +1897,18 @@
     try {
       if (!window.TriAxisAuth) throw new Error('Serviço de autenticação indisponível');
       await window.TriAxisAuth.requestPasswordReset(email, getPasswordRecoveryRedirectUrl());
+      passwordResetCooldownUntil = Date.now() + 60_000;
+      const neutralMessage = 'SE HOUVER UMA CONTA COM ESTE E-MAIL, ENVIAREMOS UM LINK DE RECUPERAÇÃO.';
+      setLoginStatus(neutralMessage, 'ok');
+      showToast('SE A CONTA EXISTIR, O LINK SERÁ ENVIADO');
     } catch (error) {
-      console.error('Falha ao solicitar recuperação de senha:', error);
+      passwordResetCooldownUntil = Date.now() + 15_000;
+      console.error('Falha operacional ao solicitar recuperação de senha.');
+      setLoginStatus('NÃO FOI POSSÍVEL SOLICITAR O LINK AGORA. AGUARDE E TENTE NOVAMENTE.', 'error');
+      showToast('SERVIÇO DE RECUPERAÇÃO TEMPORARIAMENTE INDISPONÍVEL', 'error');
     } finally {
       passwordResetRequestPending = false;
       if (button) button.disabled = false;
-      const neutralMessage = 'SE HOUVER UMA CONTA COM ESTE E-MAIL, ENVIAREMOS UM LINK DE RECUPERAÇÃO.';
-      setLoginStatus(neutralMessage, 'ok');
-      showToast('VERIFIQUE SEU E-MAIL PARA RECUPERAR A SENHA');
     }
   }
 
@@ -1861,6 +2001,7 @@
 
   async function handleCreateLoginIdSubmit(e) {
     e.preventDefault();
+    const authStartedAt = Date.now();
     const nameInput = document.getElementById('createLoginNameInput');
     const emailInput = document.getElementById('createLoginEmailInput');
     const phoneInput = document.getElementById('createLoginPhoneInput');
@@ -1904,6 +2045,7 @@
         displayName: name,
         phone
       });
+      await waitForNeutralAuthTiming(authStartedAt);
 
       if (result.session) {
         setCreateLoginStatus('CONTA CRIADA · SESSÃO AUTENTICADA.', 'ok');
@@ -1923,11 +2065,9 @@
       if (emailInput) emailInput.value = '';
       if (phoneInput) phoneInput.value = '';
     } catch (err) {
-      console.error('Falha ao criar ID pelo login:', err);
-      const message = String(err?.message || '').toLowerCase();
-      const friendly = message.includes('already registered')
-        ? 'ESTE E-MAIL JÁ POSSUI UMA CONTA.'
-        : 'NÃO FOI POSSÍVEL CRIAR A CONTA. CONFIRA OS DADOS E TENTE NOVAMENTE.';
+      await waitForNeutralAuthTiming(authStartedAt);
+      console.error('Falha operacional ao concluir cadastro.');
+      const friendly = 'NÃO FOI POSSÍVEL CONCLUIR O CADASTRO. CONFIRA OS DADOS OU TENTE ENTRAR/RECUPERAR A SENHA.';
       setCreateLoginStatus(friendly, 'error');
       showToast(friendly, 'error');
     }
@@ -1939,6 +2079,11 @@
     const parts = value.split('@');
     if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
     return parts[1].includes('.') && !parts[1].startsWith('.') && !parts[1].endsWith('.');
+  }
+
+  async function waitForNeutralAuthTiming(startedAt, minimumMs = 650) {
+    const remaining = minimumMs - (Date.now() - startedAt);
+    if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
   }
 
   function renderLoginState() {
@@ -1995,6 +2140,7 @@
 
   async function handleTagLoginSubmit(e) {
     e.preventDefault();
+    const authStartedAt = Date.now();
     const emailInput = document.getElementById('loginTagInput');
     const passInput = document.getElementById('loginPasswordInput');
     const email = (emailInput?.value || '').trim().toLowerCase();
@@ -2014,6 +2160,7 @@
       if (!window.TriAxisAuth) throw new Error('Serviço de autenticação indisponível');
       setLoginStatus('VALIDANDO CONTA...', '');
       const state = await window.TriAxisAuth.signIn(email, passInput?.value || '');
+      await waitForNeutralAuthTiming(authStartedAt);
       const agent = mapRemoteProfileToAgent(state.profile);
       setLoginStatus('CONTA VERIFICADA · ACESSO LIBERADO.', 'ok');
       if (emailInput) emailInput.value = email;
@@ -2022,11 +2169,9 @@
       closeLoginPanel();
       switchView('profile');
     } catch (err) {
-      console.error('Falha no login Supabase:', err);
-      const message = String(err?.message || '').toLowerCase();
-      const friendly = message.includes('email not confirmed')
-        ? 'CONFIRME SEU E-MAIL ANTES DE ENTRAR.'
-        : 'E-MAIL OU SENHA INCORRETOS.';
+      await waitForNeutralAuthTiming(authStartedAt);
+      console.error('Falha ao validar acesso.');
+      const friendly = 'NÃO FOI POSSÍVEL ENTRAR. CONFIRA AS CREDENCIAIS E A CONFIRMAÇÃO DO E-MAIL.';
       setLoginStatus(friendly, 'error');
       showToast(friendly, 'error');
       passInput?.focus();
@@ -2034,14 +2179,20 @@
   }
 
   async function logoutAccess() {
-    const agent = getLoggedAgent();
     try {
       await window.TriAxisAuth?.signOut();
-      if (agent) addLog(`LOGOUT REALIZADO · ${agent.tag}`);
       showToast('LOGIN ENCERRADO');
     } catch (err) {
       console.error('Falha ao encerrar sessão:', err);
       showToast('NÃO FOI POSSÍVEL ENCERRAR A SESSÃO', 'error');
+    } finally {
+      clearRuntimeLocalPii();
+      window.TriAxisOrders?.clearAllIntents?.();
+      physicalRequests = [];
+      agents = [];
+      remoteAuthState = { session: null, profile: null, roles: [] };
+      renderLoginState();
+      renderAllDynamic();
     }
   }
 
@@ -2175,7 +2326,8 @@
       <p><b>Total</b><span>${formatCurrencyBRL(data.estimatedPrice)}</span></p>`;
   }
 
-  function submitCatalogConfiguredOrder(product) {
+  async function submitCatalogConfiguredOrder(product) {
+    if (orderSubmissionPending) return;
     const validatedAgent = requirePurchaseValidation();
     if (!validatedAgent) return;
     const data = getCatalogConfigData(product);
@@ -2183,49 +2335,40 @@
       showToast('TAG VALIDADA NÃO CONFERE COM O PEDIDO', 'error');
       return;
     }
-    const now = new Date();
-    const orderCode = `ORD-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
-    const syntheticTag = data.agent.tag;
-    const request = normalizePhysicalRequest({
-      id: `REQ-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-      tag: syntheticTag,
-      name: data.agent.name,
-      phone: data.agent.phone || '—',
-      qrId: data.agent.qrId || orderCode,
-      requestedAt: now.toISOString(),
-      status: 'Pendente',
-      notes: `Pedido catálogo ${orderCode}. Qtd: ${data.qty}. Cores: ${data.colorMain} / ${data.colorAccent}. ${data.notes}`.trim(),
-      material: data.material,
-      materialLabel: getPhysicalOptionLabel('material', data.material),
-      finish: data.finish,
-      finishLabel: getPhysicalOptionLabel('finish', data.finish),
-      accessory: data.accessory,
-      accessoryLabel: getPhysicalOptionLabel('accessory', data.accessory),
-      productId: product.id,
-      productName: product.name,
-      productVariant: data.variant,
-      productVariantLabel: getVariantLabel(data.variant),
-      estimatedPrice: data.estimatedPrice
-    });
-    request.orderCode = orderCode;
-    request.quantity = data.qty;
-    request.colorMain = data.colorMain;
-    request.colorAccent = data.colorAccent;
-    request.category = product.categoryLabel;
-    request.origin = 'Catálogo';
-    request.deadline = product.productionTime;
-    physicalRequests.unshift(request);
-    if (!savePhysicalIdRequests()) {
-      physicalRequests.shift();
+    if (!product.remoteId || !window.TriAxisOrders) {
+      showToast('PRODUTO ONLINE INDISPONÍVEL. ATUALIZE O CATÁLOGO.', 'error');
       return;
     }
-    closeModal('modalCatalogConfig');
-    addLog(`PEDIDO DO CATÁLOGO · ${orderCode} · ${product.name} · ${formatCurrencyBRL(data.estimatedPrice)}`);
-    renderCatalog();
-    renderProduction();
-    renderPhysicalRequests();
-    showToast(`PEDIDO ${orderCode} ENVIADO PARA PRODUÇÃO`);
-    switchView('production');
+    orderSubmissionPending = true;
+    try {
+      catalogOrderIntentId = `catalog:${data.agent.id || data.agent.tag}:${product.remoteId}`;
+      const result = await window.TriAxisOrders.submit({
+        productId: product.remoteId,
+        quantity: data.qty,
+        intentId: catalogOrderIntentId,
+        notes: data.notes,
+        configuration: {
+          variant: data.variant,
+          material: data.material,
+          finish: data.finish,
+          accessory: data.accessory,
+          color_main: data.colorMain.slice(0, 120),
+          color_accent: data.colorAccent.slice(0, 120),
+          origin: 'catalogo',
+          deadline: String(product.productionTime || 'sob_consulta').slice(0, 120)
+        }
+      });
+      closeModal('modalCatalogConfig');
+      await refreshOrdersFromSupabase();
+      renderCatalog();
+      showToast(`PEDIDO ${result?.order_code || ''} ENVIADO PARA PRODUÇÃO`);
+      switchView('profile');
+    } catch (error) {
+      console.error('Falha ao enviar pedido do catálogo:', error);
+      showToast('NÃO FOI POSSÍVEL ENVIAR O PEDIDO. TENTE NOVAMENTE.', 'error');
+    } finally {
+      orderSubmissionPending = false;
+    }
   }
 
 
@@ -2284,6 +2427,7 @@
     const img = String(record.img || record.gallery?.[0] || 'assets/cybershape-unit.png');
     return {
       id,
+      remoteId: record.remoteId || null,
       name: String(record.name || 'Novo artefato').trim() || 'Novo artefato',
       line: String(record.line || 'TRIAXIS PRODUCT').trim() || 'TRIAXIS PRODUCT',
       img,
@@ -2450,6 +2594,7 @@
         persistCatalogLocalState();
         renderAllDynamic();
         renderCatalogAdmin();
+        scheduleCatalogSignedUrlRefresh();
         showToast('CATÁLOGO INICIAL MIGRADO PARA O SUPABASE');
         return true;
       }
@@ -2458,12 +2603,19 @@
       persistCatalogLocalState();
       renderAllDynamic();
       renderCatalogAdmin();
+      scheduleCatalogSignedUrlRefresh();
       return true;
     } catch (error) {
       console.error('Falha ao carregar catálogo do Supabase; usando cópia local:', error);
       if (window.TriAxisAuth?.isAdmin?.()) showToast('CATÁLOGO ONLINE INDISPONÍVEL · VERIFIQUE A MIGRAÇÃO 002', 'error');
       return false;
     }
+  }
+
+  function scheduleCatalogSignedUrlRefresh() {
+    if (catalogSignedRefreshTimer) clearTimeout(catalogSignedRefreshTimer);
+    const delay = Number(window.TriAxisCatalog?.signedUrlRefreshMs || 45 * 60 * 1000);
+    catalogSignedRefreshTimer = setTimeout(() => { void refreshCatalogFromSupabase(); }, delay);
   }
 
   async function saveCatalogAdminState(options = {}) {
@@ -2715,13 +2867,16 @@
       </article>`).join('');
     grid.querySelectorAll('[data-catalog-detail]').forEach(button => button.addEventListener('click', () => openCatalogDetail(button.getAttribute('data-catalog-detail'))));
     grid.querySelectorAll('[data-catalog-config]').forEach(button => button.addEventListener('click', () => openCatalogConfigurator(button.getAttribute('data-catalog-config'))));
+    grid.querySelectorAll('img[src*="/storage/v1/object/sign/product-images/"]').forEach((image) => {
+      image.addEventListener('error', () => { void refreshCatalogFromSupabase(); }, { once: true });
+    });
     updatePurchaseGateUi();
     renderCatalogAdmin();
   }
 
   function setCatalogPanel(panel = 'storefront') {
     const settings = loadSettings();
-    const target = panel === 'admin' && settings.mode === 'admin' ? 'admin' : 'storefront';
+    const target = panel === 'admin' && hasRemoteRole('admin') && settings.mode === 'admin' ? 'admin' : 'storefront';
     const storefront = document.getElementById('catalogStorefrontPanel');
     const admin = document.getElementById('catalogAdminPanel');
     const storeButton = document.getElementById('btnCatalogStorefrontTab');
@@ -3382,7 +3537,7 @@
           <p><b>Prazo</b><span>${escapeHtml(req.deadline || 'sob consulta')}</span></p>
         </div>
         <div class="production-card-actions">
-          <select class="toolbar-select" data-request-status="${escapeHtml(req.id)}">${renderPhysicalStatusOptions(req.status)}</select>
+          <select class="toolbar-select" data-request-status="${escapeHtml(req.id)}">${renderPhysicalStatusOptions(req)}</select>
           <button class="btn btn-outline btn-sm" data-open-id="${escapeHtml(req.tag)}" type="button">ABRIR ID</button>
           <button class="btn btn-primary btn-sm" data-order-png="${escapeHtml(req.id)}" type="button">ORDEM PNG</button>
         </div>
@@ -3501,8 +3656,12 @@
     return `<div class="physical-progress">${PHYSICAL_STATUSES.map((step, index) => `<span class="${current >= 0 && index <= current ? 'done' : ''}"><i></i>${escapeHtml(step)}</span>`).join('')}</div>`;
   }
 
-  function renderPhysicalStatusOptions(currentStatus) {
-    return PHYSICAL_STATUSES.map(status => `<option ${status === currentStatus ? 'selected' : ''}>${escapeHtml(status)}</option>`).join('');
+  function renderPhysicalStatusOptions(request) {
+    const currentStatus = typeof request === 'string' ? request : request?.status;
+    const options = request?.remote && window.TriAxisOrders
+      ? window.TriAxisOrders.allowedStatusOptions(request.remoteStatus)
+      : PHYSICAL_STATUSES.map((value) => ({ value }));
+    return options.map(({ value }) => `<option ${value === currentStatus ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('');
   }
 
   function loadImageForCanvas(src) {
@@ -3636,6 +3795,7 @@
     document.body.classList.toggle('noise-off', !settings.noise);
     document.body.dataset.theme = settings.theme || 'classic';
     document.body.dataset.mode = effectiveMode;
+    document.body.dataset.productionAccess = canAccessProduction() ? 'true' : 'false';
     setChecked('toggleScanlines', settings.scanlines);
     setChecked('toggleGlitch', settings.glitch);
     setChecked('toggleNoise', settings.noise);
@@ -3722,6 +3882,18 @@
     return { kind: 'triaxis-encrypted-backup', version: 5, crypto: { kdf: 'PBKDF2-SHA-256', iterations: 250000, cipher: 'AES-256-GCM', salt: bytesToBase64(salt), iv: bytesToBase64(iv) }, ciphertext: bytesToBase64(ciphertext) };
   }
 
+  function downloadEncryptedBackup(envelope, filename) {
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }
+
   async function decryptBackupPayload(envelope, password) {
     if (envelope?.kind !== 'triaxis-encrypted-backup' || envelope?.version !== 5 || envelope?.crypto?.kdf !== 'PBKDF2-SHA-256' || envelope?.crypto?.cipher !== 'AES-256-GCM' || envelope?.crypto?.iterations !== 250000) throw new Error('Backup criptografado inválido');
     const salt = base64ToBytes(envelope.crypto.salt || '');
@@ -3750,15 +3922,11 @@
     if (password.length < 12) { showToast('SENHA DO BACKUP DEVE TER AO MENOS 12 CARACTERES', 'error'); return; }
     const confirmation = prompt('Confirme a senha do backup:');
     if (confirmation !== password) { showToast('AS SENHAS DO BACKUP NÃO CONFEREM', 'error'); return; }
-    const payload = { version: 5, exportedAt: new Date().toISOString(), agents, physicalRequests, catalogState: getCatalogAdminState(), settings: loadSettings(), log: loadLog(), passwordVault: loadPasswordVault() };
+    const payload = { version: 5, exportedAt: new Date().toISOString(), agents: [], physicalRequests: [], catalogState: getCatalogAdminState(), settings: loadSettings(), log: [], passwordVault: {} };
     let envelope;
     try { envelope = await encryptBackupPayload(payload, password); }
     catch (error) { console.error(error); showToast('NÃO FOI POSSÍVEL CRIPTOGRAFAR O BACKUP', 'error'); return; }
-    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `triaxis-nexus-v4-backup-${Date.now()}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    downloadEncryptedBackup(envelope, `triaxis-nexus-v4-backup-${Date.now()}.json`);
     addLog('BACKUP EXPORTADO');
     showToast('BACKUP EXPORTADO COM SUCESSO');
   }
@@ -3768,7 +3936,7 @@
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async function (ev) {
-      const storageKeys = [STORAGE_KEY, PHYSICAL_REQUESTS_KEY, CATALOG_ADMIN_STORAGE_KEY, SETTINGS_KEY, LOG_KEY, PASSWORD_HASH_KEY];
+      const storageKeys = [CATALOG_ADMIN_STORAGE_KEY, SETTINGS_KEY];
       let storageSnapshot = null;
       let memorySnapshot = null;
       try {
@@ -3778,6 +3946,11 @@
         const password = prompt('Informe a senha deste backup:');
         if (password === null) { e.target.value = ''; return; }
         const data = await decryptBackupPayload(envelope, password);
+        // Backups antigos continuam legíveis, mas PII, pedidos e credenciais locais não voltam a ser fonte ativa.
+        data.agents = [];
+        data.physicalRequests = [];
+        data.log = [];
+        data.passwordVault = {};
         const incoming = data.agents;
         if (!Array.isArray(incoming)) throw new Error('Formato inválido');
         const map = new Map(agents.map(a => [a.tag, a]));
@@ -3804,14 +3977,11 @@
         const nextSettings = data.settings && typeof data.settings === 'object' ? { ...DEFAULT_SETTINGS, ...data.settings } : loadSettings();
         const nextLog = Array.isArray(data.log) ? data.log.slice(0, 80) : loadLog();
         const serialized = {
-          [STORAGE_KEY]: JSON.stringify(nextAgents),
-          [PHYSICAL_REQUESTS_KEY]: JSON.stringify(nextRequests),
           [CATALOG_ADMIN_STORAGE_KEY]: JSON.stringify(nextCatalogState),
-          [SETTINGS_KEY]: JSON.stringify(nextSettings),
-          [LOG_KEY]: JSON.stringify(nextLog),
-          [PASSWORD_HASH_KEY]: JSON.stringify(nextVault)
+          [SETTINGS_KEY]: JSON.stringify(nextSettings)
         };
         Object.entries(serialized).forEach(([key, value]) => localStorage.setItem(key, value));
+        clearRuntimeLocalPii();
         agents = nextAgents;
         physicalRequests = nextRequests;
         applyCatalogAdminRecords(nextCatalogState.products);
@@ -4068,38 +4238,8 @@
   }
 
   function createQuoteProductionRequest() {
-    const agent = requirePurchaseValidation();
-    if (!agent) return;
-    const q = calculateQuote();
-    const customer = agent.name;
-    const request = normalizePhysicalRequest({
-      id: `REQ-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-      tag: agent.tag,
-      name: customer,
-      phone: agent.phone || '—',
-      qrId: agent.qrId || `TRX-ORDER-${Date.now().toString(36).toUpperCase()}`,
-      requestedAt: new Date().toISOString(),
-      status: 'Pendente',
-      notes: `${q.product} · ${q.size} · ${q.material} · ${q.finish} · ${q.qty} un. ${q.notes ? '· ' + q.notes : ''}`,
-      material: 'pla_fosco', materialLabel: q.material,
-      finish: 'simples', finishLabel: q.finish,
-      accessory: 'sem_corrente', accessoryLabel: 'Sob demanda',
-      productId: 'cybershape_unit', productName: q.product,
-      productVariant: 'standard', productVariantLabel: 'Orçamento rápido',
-      quantity: q.qty,
-      deadline: `${q.days} a ${q.days + 2} dias`,
-      estimatedDays: `${q.days} a ${q.days + 2} dias`,
-      origin: 'Orçamento rápido',
-      estimatedPrice: q.total
-    });
-    physicalRequests.unshift(request);
-    if (!savePhysicalIdRequests()) {
-      physicalRequests.shift();
-      return;
-    }
-    addLog(`ORÇAMENTO ENVIADO PARA PRODUÇÃO · ${request.name} · ${formatCurrencyBRL(q.total)}`);
-    renderProduction();
-    showToast('ORÇAMENTO ENVIADO PARA PRODUÇÃO');
+    if (!requirePurchaseValidation()) return;
+    showToast('ORÇAMENTO RÁPIDO É APENAS UMA ESTIMATIVA. ENVIE O PEDIDO PELO CATÁLOGO.', 'error');
   }
 
   function verifyNode() {
@@ -4189,6 +4329,7 @@
 
   /* ── Inicialização ───────────────────────────────────────────────── */
   async function init() {
+    if (!await remediateLegacyLocalPii()) return;
     agents = loadAgents();
     validatedPurchaseTag = null;
     loggedAgentTag = null;
@@ -4200,6 +4341,9 @@
     setCurrentTag(generateUniqueTag());
 
     document.querySelectorAll('.nav-item').forEach((btn) => btn.addEventListener('click', () => switchView(btn.getAttribute('data-view'))));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void refreshCatalogFromSupabase();
+    });
     document.querySelectorAll('[data-home-go]').forEach((btn) => btn.addEventListener('click', () => handleHomeQuickAccess(btn.getAttribute('data-home-go'))));
     document.getElementById('btnToggleSidebar')?.addEventListener('click', toggleSidebarHidden);
     document.getElementById('btnShowSidebar')?.addEventListener('click', () => setSidebarHidden(false));
@@ -4378,5 +4522,6 @@
     }
   }
 
+  window.TriAxisLegacyMigration = Object.freeze({ run: remediateLegacyLocalPii });
   document.addEventListener('DOMContentLoaded', init);
 })();
