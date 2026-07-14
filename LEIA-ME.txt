@@ -27,9 +27,19 @@ COMO ABRIR
 CADASTRO E LOGIN
 - Novas contas devem ser criadas em MEU PERFIL > CRIAR ID.
 - O usuário entra com e-mail e senha.
+- Em ESQUECI MINHA SENHA, o usuário informa o e-mail e recebe um link seguro do Supabase.
+- Ao abrir o link, o próprio painel do TriAxis solicita e confirma uma nova senha forte.
+- A recuperação não remove nem recria a conta: perfil, Tag e papéis são mantidos.
 - A tag é gerada pelo banco e não funciona como senha.
 - O cadastro local de agentes pelo painel legado está desativado.
 - Acesso administrativo depende do papel admin no Supabase.
+
+RECUPERAÇÃO DE SENHA
+- O endereço publicado deve estar autorizado em Supabase > Authentication > URL Configuration.
+- Site URL: https://apenassamp-dot.github.io/TriAxiS/
+- Redirect URL: https://apenassamp-dot.github.io/TriAxiS/**
+- A mensagem de solicitação é sempre neutra e não informa se um e-mail está cadastrado.
+- Links de recuperação expirados devem ser solicitados novamente.
 
 BANCO
 - A migração inicial está em supabase/migrations/001_initial_schema.sql.

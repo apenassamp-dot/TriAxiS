@@ -5365,11 +5365,16 @@ body.sidebar-hidden .profile-login-node .login-access-widget{
   display: none !important;
 }
 .login-panel[data-login-mode="enter"] #formCreateLoginId,
-.login-panel[data-login-mode="create"] #formTagLogin{
+.login-panel[data-login-mode="enter"] #formPasswordRecovery,
+.login-panel[data-login-mode="create"] #formTagLogin,
+.login-panel[data-login-mode="create"] #formPasswordRecovery,
+.login-panel[data-login-mode="recovery"] #formTagLogin,
+.login-panel[data-login-mode="recovery"] #formCreateLoginId{
   display: none !important;
 }
 .login-panel[data-login-mode="enter"] #formTagLogin:not([hidden]),
-.login-panel[data-login-mode="create"] #formCreateLoginId:not([hidden]){
+.login-panel[data-login-mode="create"] #formCreateLoginId:not([hidden]),
+.login-panel[data-login-mode="recovery"] #formPasswordRecovery:not([hidden]){
   display: flex;
 }
 

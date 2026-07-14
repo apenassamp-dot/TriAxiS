@@ -14,7 +14,7 @@
 
 <link rel="icon" type="image/png" href="assets/mini-logo.png">
 <link rel="apple-touch-icon" href="assets/mini-logo.png">
-<link rel="stylesheet" href="style.css?v=20260713-catalog-db">
+<link rel="stylesheet" href="style.css?v=20260713-password-recovery">
 </head>
 <body>
 
@@ -236,6 +236,40 @@
 
               <div class="login-field-card login-field-card--action">
                 <button id="btnSubmitLogin" class="btn btn-primary btn-block" type="submit">VALIDAR ACESSO</button>
+                <button id="btnForgotPassword" class="btn btn-outline btn-sm btn-block" type="button">ESQUECI MINHA SENHA</button>
+              </div>
+            </form>
+
+            <form id="formPasswordRecovery" class="tag-login-form auth-form-recovery login-scroll-page" novalidate hidden>
+              <div class="login-section-title login-field-card login-field-card--intro">
+                <span>// RECUPERAÇÃO SEGURA</span>
+                <strong>Definir uma nova senha</strong>
+                <small>Escolha uma senha forte. Seu perfil, sua Tag e suas permissões serão mantidos.</small>
+              </div>
+
+              <div class="login-field-card">
+                <div class="login-field-head"><span>01</span><label for="recoveryPasswordInput">NOVA SENHA</label></div>
+                <input id="recoveryPasswordInput" type="password" placeholder="Mínimo de 8 caracteres" autocomplete="new-password" minlength="8" maxlength="72" required>
+                <div class="login-rules">
+                  <span id="recoveryRuleLen">8 ou mais caracteres</span>
+                  <span id="recoveryRuleNums">1 número</span>
+                  <span id="recoveryRuleSymbols">1 símbolo</span>
+                  <span id="recoveryRuleLetters">maiúscula + minúscula</span>
+                  <span id="recoveryRuleSeq">sem sequência numérica</span>
+                </div>
+              </div>
+
+              <div class="login-field-card">
+                <div class="login-field-head"><span>02</span><label for="recoveryPasswordConfirmInput">CONFIRMAR NOVA SENHA</label></div>
+                <input id="recoveryPasswordConfirmInput" type="password" placeholder="Repita a nova senha" autocomplete="new-password" minlength="8" maxlength="72" required>
+              </div>
+
+              <div class="login-field-card login-field-card--status">
+                <p id="recoveryStatusText" class="login-status-text" role="status" aria-live="polite">Informe e confirme sua nova senha.</p>
+              </div>
+
+              <div class="login-field-card login-field-card--action">
+                <button id="btnSubmitPasswordRecovery" class="btn btn-primary btn-block" type="submit">ATUALIZAR SENHA</button>
               </div>
             </form>
 
@@ -1327,9 +1361,9 @@
 
 <script src="assets/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=20260713-catalog-db"></script>
-<script src="supabase-auth.js?v=20260713-catalog-db"></script>
+<script src="supabase-config.js?v=20260713-password-recovery"></script>
+<script src="supabase-auth.js?v=20260713-password-recovery"></script>
 <script src="supabase-catalog.js?v=20260713-catalog-db"></script>
-<script src="script.js?v=20260713-catalog-db"></script>
+<script src="script.js?v=20260713-password-recovery-fix"></script>
 </body>
 </html>

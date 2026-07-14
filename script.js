@@ -34,6 +34,9 @@
   let validatedPurchaseTag = null;
   let loggedAgentTag = null;
   let remoteAuthState = { session: null, profile: null, roles: [] };
+  let passwordRecoveryMode = false;
+  let passwordResetRequestPending = false;
+  let passwordUpdatePending = false;
 
   const DEFAULT_SETTINGS = { scanlines: true, glitch: true, noise: true, theme: 'classic', mode: 'client' };
 
@@ -1536,7 +1539,15 @@
     el.className = `login-status-text ${state}`.trim();
   }
 
+  function setRecoveryStatus(message, state = '') {
+    const el = document.getElementById('recoveryStatusText');
+    if (!el) return;
+    el.textContent = message;
+    el.className = `login-status-text ${state}`.trim();
+  }
+
   function setLoginMode(mode = 'enter') {
+    if (passwordRecoveryMode && mode !== 'recovery') return;
     const normalizedMode = mode === 'create' ? 'create' : 'enter';
     const loginForm = document.getElementById('formTagLogin');
     const createForm = document.getElementById('formCreateLoginId');
@@ -1567,6 +1578,171 @@
       setLoginStatus('Aguardando credenciais.');
       setTimeout(() => document.getElementById('loginTagInput')?.focus(), 80);
     }
+  }
+
+  function updateRecoveryPasswordRules() {
+    const password = document.getElementById('recoveryPasswordInput')?.value || '';
+    const result = validateAccessPassword(password);
+    applyPasswordRuleClasses(result, {
+      len: 'recoveryRuleLen',
+      nums: 'recoveryRuleNums',
+      symbols: 'recoveryRuleSymbols',
+      letters: 'recoveryRuleLetters',
+      seq: 'recoveryRuleSeq'
+    }, password);
+    return result;
+  }
+
+  function enterPasswordRecoveryMode() {
+    passwordRecoveryMode = true;
+    const panel = document.getElementById('loginPanel');
+    const recoveryForm = document.getElementById('formPasswordRecovery');
+    const loginForm = document.getElementById('formTagLogin');
+    const createForm = document.getElementById('formCreateLoginId');
+    const loggedCard = document.getElementById('loginLoggedCard');
+    const tabs = document.querySelector('.login-mode-tabs');
+    if (panel) panel.setAttribute('data-login-mode', 'recovery');
+    if (recoveryForm) {
+      recoveryForm.hidden = false;
+      recoveryForm.setAttribute('aria-hidden', 'false');
+      recoveryForm.scrollTop = 0;
+    }
+    if (loginForm) loginForm.hidden = true;
+    if (createForm) createForm.hidden = true;
+    if (loggedCard) loggedCard.hidden = true;
+    if (tabs) tabs.hidden = true;
+    updateRecoveryPasswordRules();
+    setRecoveryStatus('Informe e confirme sua nova senha.');
+    switchView('profile');
+    openLoginPanel();
+    window.setTimeout(() => document.getElementById('recoveryPasswordInput')?.focus(), 80);
+  }
+
+  function consumePasswordRecoveryUrlError() {
+    let current;
+    try {
+      current = new URL(window.location.href);
+    } catch (error) {
+      return false;
+    }
+
+    const errorKeys = ['error', 'error_code', 'error_description'];
+    const queryHasError = errorKeys.some((key) => current.searchParams.has(key));
+    let hashParams = null;
+    let hashHasError = false;
+    const rawHash = current.hash.startsWith('#') ? current.hash.slice(1) : current.hash;
+    if (rawHash && (rawHash.includes('=') || rawHash.includes('&'))) {
+      hashParams = new URLSearchParams(rawHash);
+      hashHasError = errorKeys.some((key) => hashParams.has(key));
+    }
+    if (!queryHasError && !hashHasError) return false;
+
+    errorKeys.forEach((key) => current.searchParams.delete(key));
+    if (hashParams) {
+      errorKeys.forEach((key) => hashParams.delete(key));
+      const cleanHash = hashParams.toString();
+      current.hash = cleanHash ? `#${cleanHash}` : '';
+    }
+    window.history.replaceState(window.history.state, document.title, `${current.pathname}${current.search}${current.hash}`);
+    return true;
+  }
+
+  function showPasswordRecoveryUrlError() {
+    passwordRecoveryMode = false;
+    switchView('profile');
+    setLoginMode('enter');
+    openLoginPanel();
+    setLoginStatus('LINK DE RECUPERAÇÃO INVÁLIDO OU EXPIRADO. SOLICITE UM NOVO LINK.', 'error');
+    showToast('LINK DE RECUPERAÇÃO INVÁLIDO OU EXPIRADO', 'error');
+  }
+
+  function getPasswordRecoveryRedirectUrl() {
+    try {
+      const current = new URL(window.location.href);
+      if (['http:', 'https:'].includes(current.protocol)) {
+        current.search = '';
+        current.hash = '';
+        return current.href;
+      }
+    } catch (error) {}
+    return window.TRIAXIS_SUPABASE_CONFIG?.publicSiteUrl || 'https://apenassamp-dot.github.io/TriAxiS/';
+  }
+
+  async function requestPasswordRecovery() {
+    if (passwordResetRequestPending) return;
+    const emailInput = document.getElementById('loginTagInput');
+    const button = document.getElementById('btnForgotPassword');
+    const email = String(emailInput?.value || '').trim().toLowerCase();
+    if (!isValidSignupEmail(email) || !emailInput?.checkValidity()) {
+      setLoginStatus('INFORME SEU E-MAIL PARA RECEBER O LINK DE RECUPERAÇÃO.', 'error');
+      emailInput?.focus();
+      return;
+    }
+
+    passwordResetRequestPending = true;
+    if (button) button.disabled = true;
+    setLoginStatus('SOLICITANDO LINK DE RECUPERAÇÃO...', '');
+    try {
+      if (!window.TriAxisAuth) throw new Error('Serviço de autenticação indisponível');
+      await window.TriAxisAuth.requestPasswordReset(email, getPasswordRecoveryRedirectUrl());
+    } catch (error) {
+      console.error('Falha ao solicitar recuperação de senha:', error);
+    } finally {
+      passwordResetRequestPending = false;
+      if (button) button.disabled = false;
+      const neutralMessage = 'SE HOUVER UMA CONTA COM ESTE E-MAIL, ENVIAREMOS UM LINK DE RECUPERAÇÃO.';
+      setLoginStatus(neutralMessage, 'ok');
+      showToast('VERIFIQUE SEU E-MAIL PARA RECUPERAR A SENHA');
+    }
+  }
+
+  async function handlePasswordRecoverySubmit(event) {
+    event.preventDefault();
+    if (passwordUpdatePending) return;
+    const passwordInput = document.getElementById('recoveryPasswordInput');
+    const confirmationInput = document.getElementById('recoveryPasswordConfirmInput');
+    const submitButton = document.getElementById('btnSubmitPasswordRecovery');
+    const password = passwordInput?.value || '';
+    const confirmation = confirmationInput?.value || '';
+    const passwordCheck = updateRecoveryPasswordRules();
+
+    if (!passwordCheck.valid) {
+      setRecoveryStatus('SENHA INVÁLIDA · USE 8 OU MAIS CARACTERES, COM MAIÚSCULA, MINÚSCULA, NÚMERO E SÍMBOLO.', 'error');
+      passwordInput?.focus();
+      return;
+    }
+    if (password !== confirmation) {
+      setRecoveryStatus('AS SENHAS NÃO CONFEREM.', 'error');
+      confirmationInput?.focus();
+      return;
+    }
+
+    passwordUpdatePending = true;
+    if (submitButton) submitButton.disabled = true;
+    setRecoveryStatus('ATUALIZANDO SENHA COM SEGURANÇA...', '');
+    try {
+      if (!window.TriAxisAuth) throw new Error('Serviço de autenticação indisponível');
+      await window.TriAxisAuth.updatePassword(password);
+      if (passwordInput) passwordInput.value = '';
+      if (confirmationInput) confirmationInput.value = '';
+      passwordRecoveryMode = false;
+      setRecoveryStatus('SENHA ATUALIZADA COM SUCESSO.', 'ok');
+      showToast('SENHA ATUALIZADA · SUA CONTA FOI MANTIDA');
+      renderLoginState();
+      closeLoginPanel();
+      switchView('profile');
+    } catch (error) {
+      console.error('Falha ao atualizar senha:', error);
+      setRecoveryStatus('NÃO FOI POSSÍVEL ATUALIZAR A SENHA. SOLICITE UM NOVO LINK E TENTE NOVAMENTE.', 'error');
+      showToast('LINK INVÁLIDO OU EXPIRADO', 'error');
+    } finally {
+      passwordUpdatePending = false;
+      if (submitButton) submitButton.disabled = false;
+    }
+  }
+
+  function handleRemoteAuthEvent(event) {
+    if (event === 'PASSWORD_RECOVERY') enterPasswordRecoveryMode();
   }
 
   function updateCreateLoginTagPreview(forceNew = false) {
@@ -1692,19 +1868,22 @@
     const name = document.getElementById('loginLoggedName');
     const tag = document.getElementById('loginLoggedTag');
     const createForm = document.getElementById('formCreateLoginId');
+    const recoveryForm = document.getElementById('formPasswordRecovery');
     const tabs = document.querySelector('.login-mode-tabs');
     if (widget) widget.classList.toggle('logged', Boolean(agent));
-    if (loggedCard) loggedCard.hidden = !agent;
-    if (tabs) tabs.hidden = Boolean(agent);
-    if (form && agent) form.hidden = true;
-    if (createForm && agent) createForm.hidden = true;
+    if (loggedCard) loggedCard.hidden = !agent || passwordRecoveryMode;
+    if (tabs) tabs.hidden = Boolean(agent) || passwordRecoveryMode;
+    if (form && (agent || passwordRecoveryMode)) form.hidden = true;
+    if (createForm && (agent || passwordRecoveryMode)) createForm.hidden = true;
+    if (recoveryForm) recoveryForm.hidden = !passwordRecoveryMode;
+    if (passwordRecoveryMode) document.getElementById('loginPanel')?.setAttribute('data-login-mode', 'recovery');
     if (!agent && form?.hidden && createForm?.hidden) setLoginMode('enter');
     if (name) name.textContent = agent ? agent.name : '—';
     if (tag) tag.textContent = agent ? `${agent.tag} · ${agent.level || 'LVL-02'} · ${agent.status || 'Autorizado'}` : '#-----';
     if (loginButtonText) loginButtonText.textContent = agent ? 'LOGADO' : 'FAZER LOGIN';
     renderUserProfile();
-    if (!agent && !createForm?.hidden) setCreateLoginStatus('Preencha e-mail, nome, senha e telefone para criar o acesso.');
-    if (!agent && !form?.hidden) setLoginStatus('Aguardando credenciais.');
+    if (!passwordRecoveryMode && !agent && !createForm?.hidden) setCreateLoginStatus('Preencha e-mail, nome, senha e telefone para criar o acesso.');
+    if (!passwordRecoveryMode && !agent && !form?.hidden) setLoginStatus('Aguardando credenciais.');
   }
 
   function openLoginPanel() {
@@ -4033,6 +4212,8 @@
     document.getElementById('btnCloseLoginPanel')?.addEventListener('click', closeLoginPanel);
     document.getElementById('formTagLogin')?.addEventListener('submit', handleTagLoginSubmit);
     document.getElementById('formCreateLoginId')?.addEventListener('submit', handleCreateLoginIdSubmit);
+    document.getElementById('formPasswordRecovery')?.addEventListener('submit', handlePasswordRecoverySubmit);
+    document.getElementById('btnForgotPassword')?.addEventListener('click', requestPasswordRecovery);
     document.querySelectorAll('[data-login-mode]').forEach((btn) => btn.addEventListener('click', () => setLoginMode(btn.getAttribute('data-login-mode'))));
     document.querySelectorAll('[data-login-scroll]').forEach((btn) => btn.addEventListener('click', () => scrollActiveLoginPage(btn.getAttribute('data-login-scroll'))));
     document.getElementById('btnRegenerateLoginTag')?.addEventListener('click', () => {
@@ -4042,6 +4223,10 @@
     document.getElementById('createLoginPasswordInput')?.addEventListener('input', updateCreateIdPasswordRules);
     document.getElementById('createLoginPhoneInput')?.addEventListener('input', (e) => { e.target.value = maskPhone(e.target.value); });
     document.getElementById('loginPasswordInput')?.addEventListener('input', updateLoginRules);
+    document.getElementById('recoveryPasswordInput')?.addEventListener('input', updateRecoveryPasswordRules);
+    document.getElementById('recoveryPasswordConfirmInput')?.addEventListener('input', () => {
+      if (passwordRecoveryMode) setRecoveryStatus('Informe e confirme sua nova senha.');
+    });
     document.getElementById('loginTagInput')?.addEventListener('input', (e) => {
       e.target.value = String(e.target.value || '').trimStart().toLowerCase();
       if (!getLoggedAgent()) setLoginStatus('Aguardando credenciais.');
@@ -4058,14 +4243,20 @@
     renderLoginState();
     updateLoginRules();
 
+    const passwordRecoveryUrlError = consumePasswordRecoveryUrlError();
     try {
       if (!window.TriAxisAuth) throw new Error('Cliente Supabase não carregado');
-      await window.TriAxisAuth.initialize(applyRemoteAuthState);
+      await window.TriAxisAuth.initialize(applyRemoteAuthState, handleRemoteAuthEvent);
+      if (passwordRecoveryUrlError) showPasswordRecoveryUrlError();
     } catch (err) {
       console.error('Falha ao iniciar autenticação Supabase:', err);
       applyRemoteAuthState({ session: null, profile: null, roles: [] });
-      setLoginStatus('SERVIÇO DE LOGIN TEMPORARIAMENTE INDISPONÍVEL.', 'error');
-      showToast('LOGIN ONLINE INDISPONÍVEL', 'error');
+      if (passwordRecoveryUrlError) {
+        showPasswordRecoveryUrlError();
+      } else {
+        setLoginStatus('SERVIÇO DE LOGIN TEMPORARIAMENTE INDISPONÍVEL.', 'error');
+        showToast('LOGIN ONLINE INDISPONÍVEL', 'error');
+      }
     }
   }
 

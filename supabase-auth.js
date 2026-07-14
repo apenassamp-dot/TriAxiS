@@ -3,6 +3,7 @@
 
   let client = null;
   let changeHandler = null;
+  let authEventHandler = null;
   let currentState = Object.freeze({ session: null, profile: null, roles: [] });
 
   function requireClient() {
@@ -39,12 +40,13 @@
     });
   }
 
-  async function initialize(onChange) {
+  async function initialize(onChange, onAuthEvent) {
     const config = window.TRIAXIS_SUPABASE_CONFIG;
     if (!config?.url || !config?.publishableKey) throw new Error('SUPABASE_CONFIG_MISSING');
     if (!window.supabase?.createClient) throw new Error('SUPABASE_SDK_MISSING');
 
     changeHandler = typeof onChange === 'function' ? onChange : null;
+    authEventHandler = typeof onAuthEvent === 'function' ? onAuthEvent : null;
     client = window.supabase.createClient(config.url, config.publishableKey, {
       auth: {
         persistSession: true,
@@ -53,11 +55,14 @@
       }
     });
 
-    const { data, error } = await client.auth.getSession();
-    if (error) throw error;
-    await loadAuthenticatedState(data?.session || null);
-
-    client.auth.onAuthStateChange((_event, session) => {
+    client.auth.onAuthStateChange((event, session) => {
+      if (authEventHandler) {
+        try {
+          authEventHandler(event, session);
+        } catch (error) {
+          console.error('Falha ao processar evento de autenticação:', error);
+        }
+      }
       window.setTimeout(() => {
         loadAuthenticatedState(session).catch((error) => {
           console.error('Falha ao atualizar sessão Supabase:', error);
@@ -65,6 +70,10 @@
         });
       }, 0);
     });
+
+    const { data, error } = await client.auth.getSession();
+    if (error) throw error;
+    await loadAuthenticatedState(data?.session || null);
 
     return currentState;
   }
@@ -113,11 +122,46 @@
     return publishState({ session: null, profile: null, roles: [] });
   }
 
+  async function requestPasswordReset(email, redirectTo) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const emailParts = normalizedEmail.split('@');
+    if (
+      !normalizedEmail ||
+      normalizedEmail.length > 254 ||
+      /\s/.test(normalizedEmail) ||
+      emailParts.length !== 2 ||
+      !emailParts[0] ||
+      !emailParts[1]?.includes('.') ||
+      emailParts[1].startsWith('.') ||
+      emailParts[1].endsWith('.')
+    ) throw new Error('INVALID_RECOVERY_EMAIL');
+
+    const destination = new URL(String(redirectTo || ''), window.location.href);
+    if (!['http:', 'https:'].includes(destination.protocol)) throw new Error('INVALID_RECOVERY_REDIRECT');
+    destination.search = '';
+    destination.hash = '';
+
+    const { error } = await requireClient().auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: destination.href
+    });
+    if (error) throw error;
+  }
+
+  async function updatePassword(password) {
+    const normalizedPassword = String(password || '');
+    if (normalizedPassword.length < 8 || normalizedPassword.length > 72) throw new Error('INVALID_RECOVERY_PASSWORD');
+    const { data, error } = await requireClient().auth.updateUser({ password: normalizedPassword });
+    if (error) throw error;
+    return data?.user || null;
+  }
+
   window.TriAxisAuth = Object.freeze({
     initialize,
     signIn,
     signUp,
     signOut,
+    requestPasswordReset,
+    updatePassword,
     getClient: () => requireClient(),
     getState: () => currentState,
     isAdmin: () => currentState.roles.includes('admin'),
