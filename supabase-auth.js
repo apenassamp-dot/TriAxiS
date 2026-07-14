@@ -118,6 +118,7 @@
     signIn,
     signUp,
     signOut,
+    getClient: () => requireClient(),
     getState: () => currentState,
     isAdmin: () => currentState.roles.includes('admin'),
     isStaff: () => currentState.roles.some((role) => ['admin', 'production', 'support'].includes(role))

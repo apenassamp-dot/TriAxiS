@@ -1478,6 +1478,7 @@
     updatePurchaseGateUi();
     renderLoginState();
     renderAllDynamic();
+    void refreshCatalogFromSupabase();
   }
 
   function hasNumberSequence(password) {
@@ -1994,6 +1995,9 @@
   let catalogAdminGalleryDraft = [];
   let catalogAdminMainImageDraft = '';
   let catalogAdminDragId = null;
+  let catalogRemoteRefreshSequence = 0;
+  let catalogRemoteMutationPending = false;
+  let catalogRemoteSeedPromise = null;
 
   function toStringList(value, fallback = []) {
     if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
@@ -2162,16 +2166,66 @@
     }
   }
 
-  function saveCatalogAdminState(options = {}) {
+  function persistCatalogLocalState() {
+    localStorage.setItem(CATALOG_ADMIN_STORAGE_KEY, JSON.stringify(getCatalogAdminState()));
+  }
+
+  async function refreshCatalogFromSupabase() {
+    if (!window.TriAxisCatalog) return false;
+    const sequence = ++catalogRemoteRefreshSequence;
+    try {
+      const remote = await window.TriAxisCatalog.load();
+      if (sequence !== catalogRemoteRefreshSequence) return false;
+      if (!remote.products.length) {
+        if (!window.TriAxisAuth?.isAdmin?.()) return false;
+        if (!catalogRemoteSeedPromise) {
+          catalogRemoteSeedPromise = window.TriAxisCatalog.sync(getCatalogAdminState())
+            .finally(() => { catalogRemoteSeedPromise = null; });
+        }
+        const seeded = await catalogRemoteSeedPromise;
+        if (sequence !== catalogRemoteRefreshSequence) return false;
+        applyCatalogAdminRecords(seeded.products);
+        catalogLayout = normalizeCatalogLayout(seeded.layout || catalogLayout);
+        persistCatalogLocalState();
+        renderAllDynamic();
+        renderCatalogAdmin();
+        showToast('CATÁLOGO INICIAL MIGRADO PARA O SUPABASE');
+        return true;
+      }
+      applyCatalogAdminRecords(remote.products);
+      catalogLayout = normalizeCatalogLayout(remote.layout || catalogLayout);
+      persistCatalogLocalState();
+      renderAllDynamic();
+      renderCatalogAdmin();
+      return true;
+    } catch (error) {
+      console.error('Falha ao carregar catálogo do Supabase; usando cópia local:', error);
+      if (window.TriAxisAuth?.isAdmin?.()) showToast('CATÁLOGO ONLINE INDISPONÍVEL · VERIFIQUE A MIGRAÇÃO 002', 'error');
+      return false;
+    }
+  }
+
+  async function saveCatalogAdminState(options = {}) {
     if (!requireAdminMode()) {
       loadCatalogAdminState();
       return false;
     }
     try {
-      localStorage.setItem(CATALOG_ADMIN_STORAGE_KEY, JSON.stringify(getCatalogAdminState()));
+      persistCatalogLocalState();
     } catch (error) {
       console.error('Falha ao salvar catálogo:', error);
       showToast('ARMAZENAMENTO CHEIO · REDUZA O TAMANHO DAS IMAGENS DO CATÁLOGO', 'error');
+      return false;
+    }
+    try {
+      if (!window.TriAxisCatalog) throw new Error('CATALOG_SERVICE_MISSING');
+      const synced = await window.TriAxisCatalog.sync(getCatalogAdminState());
+      applyCatalogAdminRecords(synced.products);
+      catalogLayout = normalizeCatalogLayout(synced.layout || catalogLayout);
+      persistCatalogLocalState();
+    } catch (error) {
+      console.error('Falha ao sincronizar catálogo no Supabase:', error);
+      showToast('NÃO FOI POSSÍVEL SALVAR O CATÁLOGO ONLINE', 'error');
       return false;
     }
     if (options.log !== false) addLog(options.message || 'CATÁLOGO ADMINISTRATIVO ATUALIZADO');
@@ -2197,10 +2251,21 @@
     renderPhysicalIdView();
   }
 
-  function commitCatalogMutation(snapshot, options) {
-    if (saveCatalogAdminState(options)) return true;
-    restoreCatalogState(snapshot);
-    return false;
+  async function commitCatalogMutation(snapshot, options) {
+    if (catalogRemoteMutationPending) {
+      restoreCatalogState(snapshot);
+      showToast('AGUARDE A SINCRONIZAÇÃO DO CATÁLOGO', 'error');
+      return false;
+    }
+    catalogRemoteMutationPending = true;
+    try {
+      if (await saveCatalogAdminState(options)) return true;
+      restoreCatalogState(snapshot);
+      try { persistCatalogLocalState(); } catch (error) { console.error('Falha ao restaurar cópia local do catálogo:', error); }
+      return false;
+    } finally {
+      catalogRemoteMutationPending = false;
+    }
   }
 
   function enrichCatalogProduct(product) {
@@ -2465,10 +2530,10 @@
     });
   }
 
-  function saveCatalogLayoutFromPanel(message = 'FORMATAÇÃO DO CATÁLOGO ATUALIZADA') {
+  async function saveCatalogLayoutFromPanel(message = 'FORMATAÇÃO DO CATÁLOGO ATUALIZADA') {
     const snapshot = snapshotCatalogState();
     catalogLayout = readCatalogLayoutForm();
-    if (!commitCatalogMutation(snapshot, { message })) return;
+    if (!await commitCatalogMutation(snapshot, { message })) return;
     showToast('FORMATAÇÃO DO CATÁLOGO SALVA');
   }
 
@@ -2574,7 +2639,7 @@
     return records;
   }
 
-  function moveCatalogProduct(productId, direction) {
+  async function moveCatalogProduct(productId, direction) {
     const snapshot = snapshotCatalogState();
     const records = getCatalogAdminRecords().sort((a, b) => a.priority - b.priority);
     const index = records.findIndex(product => product.id === productId);
@@ -2584,10 +2649,10 @@
     [records[index], records[target]] = [records[target], records[index]];
     applyCatalogAdminRecords(renumberCatalogPriorities(records));
     catalogLayout.sort = 'manual';
-    commitCatalogMutation(snapshot, { message: `PRIORIDADE ALTERADA · ${productId}` });
+    await commitCatalogMutation(snapshot, { message: `PRIORIDADE ALTERADA · ${productId}` });
   }
 
-  function reorderCatalogProduct(sourceId, targetId) {
+  async function reorderCatalogProduct(sourceId, targetId) {
     const snapshot = snapshotCatalogState();
     if (!sourceId || !targetId || sourceId === targetId) return;
     const records = getCatalogAdminRecords().sort((a, b) => a.priority - b.priority);
@@ -2598,21 +2663,21 @@
     records.splice(targetIndex, 0, moved);
     applyCatalogAdminRecords(renumberCatalogPriorities(records));
     catalogLayout.sort = 'manual';
-    commitCatalogMutation(snapshot, { message: `ORDEM DO CATÁLOGO ALTERADA · ${moved.name}` });
+    await commitCatalogMutation(snapshot, { message: `ORDEM DO CATÁLOGO ALTERADA · ${moved.name}` });
   }
 
-  function setFeaturedCatalogProduct(productId) {
+  async function setFeaturedCatalogProduct(productId) {
     const snapshot = snapshotCatalogState();
     const records = getCatalogAdminRecords();
     records.forEach(product => { product.featured = product.id === productId; });
     const selected = records.find(product => product.id === productId);
     if (selected) selected.hidden = false;
     applyCatalogAdminRecords(records);
-    if (!commitCatalogMutation(snapshot, { message: `DESTAQUE DO CATÁLOGO · ${selected?.name || productId}` })) return;
+    if (!await commitCatalogMutation(snapshot, { message: `DESTAQUE DO CATÁLOGO · ${selected?.name || productId}` })) return;
     showToast(`${selected?.name || 'PRODUTO'} DEFINIDO COMO DESTAQUE`);
   }
 
-  function toggleCatalogProductVisibility(productId) {
+  async function toggleCatalogProductVisibility(productId) {
     const snapshot = snapshotCatalogState();
     const records = getCatalogAdminRecords();
     const product = records.find(item => item.id === productId);
@@ -2624,11 +2689,11 @@
       if (next) next.featured = true;
     }
     applyCatalogAdminRecords(records);
-    if (!commitCatalogMutation(snapshot, { message: `${product.hidden ? 'PRODUTO OCULTADO' : 'PRODUTO PUBLICADO'} · ${product.name}` })) return;
+    if (!await commitCatalogMutation(snapshot, { message: `${product.hidden ? 'PRODUTO OCULTADO' : 'PRODUTO PUBLICADO'} · ${product.name}` })) return;
     showToast(product.hidden ? 'PRODUTO OCULTADO DA VITRINE' : 'PRODUTO PUBLICADO');
   }
 
-  function duplicateCatalogProduct(productId) {
+  async function duplicateCatalogProduct(productId) {
     const snapshot = snapshotCatalogState();
     const records = getCatalogAdminRecords().sort((a, b) => a.priority - b.priority);
     const source = records.find(product => product.id === productId);
@@ -2638,11 +2703,11 @@
     while (records.some(product => product.id === id)) id = slugifyCatalogId(`${source.id}_copia_${suffix++}`);
     records.push(normalizeCatalogAdminRecord({ ...source, id, name: `${source.name} Cópia`, featured: false, hidden: true, priority: records.length, updatedAt: new Date().toISOString() }));
     applyCatalogAdminRecords(renumberCatalogPriorities(records));
-    if (!commitCatalogMutation(snapshot, { message: `PRODUTO DUPLICADO · ${source.name}` })) return;
+    if (!await commitCatalogMutation(snapshot, { message: `PRODUTO DUPLICADO · ${source.name}` })) return;
     openCatalogAdminEditor(id);
   }
 
-  function deleteCatalogProduct(productId) {
+  async function deleteCatalogProduct(productId) {
     const snapshot = snapshotCatalogState();
     const records = getCatalogAdminRecords();
     const product = records.find(item => item.id === productId);
@@ -2659,7 +2724,7 @@
       next.hidden = false;
     }
     applyCatalogAdminRecords(renumberCatalogPriorities(remaining));
-    if (!commitCatalogMutation(snapshot, { message: `PRODUTO REMOVIDO · ${product.name}` })) return;
+    if (!await commitCatalogMutation(snapshot, { message: `PRODUTO REMOVIDO · ${product.name}` })) return;
     showToast('PRODUTO REMOVIDO DO CATÁLOGO');
   }
 
@@ -2872,7 +2937,7 @@
     openModal('modalCatalogAdminEditor');
   }
 
-  function saveCatalogProductFromEditor(event) {
+  async function saveCatalogProductFromEditor(event) {
     event.preventDefault();
     const snapshot = snapshotCatalogState();
     const records = getCatalogAdminRecords().sort((a, b) => a.priority - b.priority);
@@ -2934,7 +2999,7 @@
       first.hidden = false;
     }
     applyCatalogAdminRecords(renumberCatalogPriorities(records));
-    if (!commitCatalogMutation(snapshot, { message: `${previous ? 'PRODUTO ALTERADO' : 'PRODUTO CRIADO'} · ${record.name}` })) return;
+    if (!await commitCatalogMutation(snapshot, { message: `${previous ? 'PRODUTO ALTERADO' : 'PRODUTO CRIADO'} · ${record.name}` })) return;
     closeModal('modalCatalogAdminEditor');
     showToast(previous ? 'PRODUTO ATUALIZADO' : 'NOVO PRODUTO CRIADO');
   }
@@ -2958,14 +3023,14 @@
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = loadEvent => {
+    reader.onload = async loadEvent => {
       const snapshot = snapshotCatalogState();
       try {
         const data = JSON.parse(loadEvent.target.result);
         if (!Array.isArray(data.products) || !data.products.length) throw new Error('Catálogo sem produtos');
         applyCatalogAdminRecords(data.products);
         catalogLayout = normalizeCatalogLayout(data.layout || catalogLayout);
-        if (!commitCatalogMutation(snapshot, { message: `CATÁLOGO IMPORTADO · ${data.products.length} PRODUTOS` })) throw new Error('Falha ao persistir catálogo');
+        if (!await commitCatalogMutation(snapshot, { message: `CATÁLOGO IMPORTADO · ${data.products.length} PRODUTOS` })) throw new Error('Falha ao persistir catálogo');
         showToast('CATÁLOGO IMPORTADO COM SUCESSO');
       } catch (error) {
         restoreCatalogState(snapshot);
@@ -2977,13 +3042,13 @@
     reader.readAsText(file);
   }
 
-  function resetCatalogAdminData() {
+  async function resetCatalogAdminData() {
     if (!confirm('Restaurar o catálogo original da TriAxis Nexus V4? Todas as alterações de produtos e layout serão removidas.')) return;
     if (!confirm('Confirmação final: deseja realmente apagar a configuração atual do catálogo?')) return;
     const snapshot = snapshotCatalogState();
     applyCatalogAdminRecords(JSON.parse(JSON.stringify(DEFAULT_CATALOG_SNAPSHOT.products)));
     catalogLayout = normalizeCatalogLayout(DEFAULT_CATALOG_SNAPSHOT.layout);
-    if (!commitCatalogMutation(snapshot, { message: 'CATÁLOGO RESTAURADO PARA O PADRÃO V4' })) return;
+    if (!await commitCatalogMutation(snapshot, { message: 'CATÁLOGO RESTAURADO PARA O PADRÃO V4' })) return;
     showToast('CATÁLOGO PADRÃO RESTAURADO');
   }
 

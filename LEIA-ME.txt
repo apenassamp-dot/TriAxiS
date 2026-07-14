@@ -11,9 +11,9 @@ Já usam Supabase:
 - perfil e tag gerados no banco;
 - papéis customer, production, support e admin;
 - políticas RLS no banco.
+- catálogo, produtos, imagens novas e configuração da vitrine (após a migração 002).
 
 Ainda usam dados locais nesta etapa:
-- catálogo exibido pelo frontend;
 - pedidos e produção;
 - painel de agentes legado;
 - configurações visuais e logs locais.
@@ -42,10 +42,11 @@ ARQUIVOS PRINCIPAIS
 - script.js: interface e fluxos ainda em migração;
 - supabase-config.js: URL e chave publicável do frontend;
 - supabase-auth.js: integração de autenticação;
+- supabase-catalog.js: leitura e sincronização do catálogo;
 - supabase/: banco versionado e documentação;
 - assets/: imagens e QR Code.
 
 SEGURANÇA
 - A chave sb_publishable é pública por definição e depende das políticas RLS.
 - Operações administrativas não devem usar service_role no navegador.
-- Catálogo e pedidos serão migrados nas próximas etapas.
+- Pedidos serão migrados nas próximas etapas.
