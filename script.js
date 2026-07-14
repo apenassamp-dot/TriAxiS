@@ -35,6 +35,8 @@
   let loggedAgentTag = null;
   let remoteAuthState = { session: null, profile: null, roles: [] };
   let passwordRecoveryMode = false;
+  let passwordRecoveryLinkError = false;
+  let passwordRecoveryUrlProcessing = false;
   let passwordResetRequestPending = false;
   let passwordUpdatePending = false;
 
@@ -1593,7 +1595,12 @@
     return result;
   }
 
-  function enterPasswordRecoveryMode() {
+  function hasAuthenticatedRecoverySession(session) {
+    return Boolean(session?.user?.id || window.TriAxisAuth?.getState?.()?.session?.user?.id);
+  }
+
+  function enterPasswordRecoveryMode(session = null) {
+    if (!hasAuthenticatedRecoverySession(session)) return false;
     passwordRecoveryMode = true;
     const panel = document.getElementById('loginPanel');
     const recoveryForm = document.getElementById('formPasswordRecovery');
@@ -1616,6 +1623,74 @@
     switchView('profile');
     openLoginPanel();
     window.setTimeout(() => document.getElementById('recoveryPasswordInput')?.focus(), 80);
+    return true;
+  }
+
+  function getHashSearchParams(url) {
+    const rawHash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+    return rawHash && (rawHash.includes('=') || rawHash.includes('&'))
+      ? new URLSearchParams(rawHash)
+      : null;
+  }
+
+  function isValidRecoveryCredential(value) {
+    const normalized = String(value || '').trim();
+    return normalized.length >= 8 && normalized.length <= 4096 && /^[A-Za-z0-9._~+/=-]+$/.test(normalized);
+  }
+
+  function hasPasswordRecoveryUrlMarker() {
+    try {
+      const current = new URL(window.location.href);
+      const hashParams = getHashSearchParams(current);
+      const type = current.searchParams.get('type') || hashParams?.get('type') || '';
+      return String(type).toLowerCase() === 'recovery';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function capturePasswordRecoveryUrlIntent() {
+    let current;
+    try {
+      current = new URL(window.location.href);
+    } catch (error) {
+      return null;
+    }
+    const hashParams = getHashSearchParams(current);
+    const getParam = (key) => current.searchParams.get(key) || hashParams?.get(key) || '';
+    if (String(getParam('type')).toLowerCase() !== 'recovery') return null;
+
+    const tokenHash = getParam('token_hash');
+    if (isValidRecoveryCredential(tokenHash)) return Object.freeze({ kind: 'token_hash', tokenHash });
+    const code = getParam('code');
+    if (isValidRecoveryCredential(code)) return Object.freeze({ kind: 'code', code });
+    const accessToken = getParam('access_token');
+    const refreshToken = getParam('refresh_token');
+    if (isValidRecoveryCredential(accessToken) && isValidRecoveryCredential(refreshToken)) {
+      return Object.freeze({ kind: 'implicit', accessToken, refreshToken });
+    }
+    return null;
+  }
+
+  function cleanPasswordRecoveryUrlCredentials() {
+    let current;
+    try {
+      current = new URL(window.location.href);
+    } catch (error) {
+      return;
+    }
+    const sensitiveKeys = [
+      'type', 'access_token', 'refresh_token', 'token_hash', 'code',
+      'expires_in', 'expires_at', 'token_type'
+    ];
+    sensitiveKeys.forEach((key) => current.searchParams.delete(key));
+    const hashParams = getHashSearchParams(current);
+    if (hashParams) {
+      sensitiveKeys.forEach((key) => hashParams.delete(key));
+      const cleanHash = hashParams.toString();
+      current.hash = cleanHash ? `#${cleanHash}` : '';
+    }
+    window.history.replaceState(window.history.state, document.title, `${current.pathname}${current.search}${current.hash}`);
   }
 
   function consumePasswordRecoveryUrlError() {
@@ -1649,6 +1724,7 @@
 
   function showPasswordRecoveryUrlError() {
     passwordRecoveryMode = false;
+    passwordRecoveryLinkError = true;
     switchView('profile');
     setLoginMode('enter');
     openLoginPanel();
@@ -1706,6 +1782,12 @@
     const confirmation = confirmationInput?.value || '';
     const passwordCheck = updateRecoveryPasswordRules();
 
+    if (!hasAuthenticatedRecoverySession()) {
+      passwordRecoveryMode = false;
+      showPasswordRecoveryUrlError();
+      return;
+    }
+
     if (!passwordCheck.valid) {
       setRecoveryStatus('SENHA INVÁLIDA · USE 8 OU MAIS CARACTERES, COM MAIÚSCULA, MINÚSCULA, NÚMERO E SÍMBOLO.', 'error');
       passwordInput?.focus();
@@ -1741,8 +1823,8 @@
     }
   }
 
-  function handleRemoteAuthEvent(event) {
-    if (event === 'PASSWORD_RECOVERY') enterPasswordRecoveryMode();
+  function handleRemoteAuthEvent(event, session) {
+    if (event === 'PASSWORD_RECOVERY' && !passwordRecoveryUrlProcessing) enterPasswordRecoveryMode(session);
   }
 
   function updateCreateLoginTagPreview(forceNew = false) {
@@ -1883,7 +1965,7 @@
     if (loginButtonText) loginButtonText.textContent = agent ? 'LOGADO' : 'FAZER LOGIN';
     renderUserProfile();
     if (!passwordRecoveryMode && !agent && !createForm?.hidden) setCreateLoginStatus('Preencha e-mail, nome, senha e telefone para criar o acesso.');
-    if (!passwordRecoveryMode && !agent && !form?.hidden) setLoginStatus('Aguardando credenciais.');
+    if (!passwordRecoveryMode && !passwordRecoveryLinkError && !agent && !form?.hidden) setLoginStatus('Aguardando credenciais.');
   }
 
   function openLoginPanel() {
@@ -4229,6 +4311,7 @@
     });
     document.getElementById('loginTagInput')?.addEventListener('input', (e) => {
       e.target.value = String(e.target.value || '').trimStart().toLowerCase();
+      passwordRecoveryLinkError = false;
       if (!getLoggedAgent()) setLoginStatus('Aguardando credenciais.');
     });
     document.getElementById('btnLogoutAccess')?.addEventListener('click', logoutAccess);
@@ -4243,15 +4326,50 @@
     renderLoginState();
     updateLoginRules();
 
+    const passwordRecoveryUrlMarker = hasPasswordRecoveryUrlMarker();
+    const passwordRecoveryIntent = capturePasswordRecoveryUrlIntent();
     const passwordRecoveryUrlError = consumePasswordRecoveryUrlError();
+    passwordRecoveryUrlProcessing = passwordRecoveryUrlMarker;
     try {
       if (!window.TriAxisAuth) throw new Error('Cliente Supabase não carregado');
-      await window.TriAxisAuth.initialize(applyRemoteAuthState, handleRemoteAuthEvent);
-      if (passwordRecoveryUrlError) showPasswordRecoveryUrlError();
+      await window.TriAxisAuth.initialize(applyRemoteAuthState, handleRemoteAuthEvent, {
+        detectSessionInUrl: !passwordRecoveryUrlMarker
+      });
+      let passwordRecoveryProcessingError = false;
+      let recoveredSession = null;
+      if (passwordRecoveryIntent) {
+        try {
+          let recoveryState = null;
+          if (passwordRecoveryIntent.kind === 'token_hash') {
+            recoveryState = await window.TriAxisAuth.verifyRecoveryTokenHash(passwordRecoveryIntent.tokenHash);
+          } else if (passwordRecoveryIntent.kind === 'code') {
+            recoveryState = await window.TriAxisAuth.exchangeRecoveryCode(passwordRecoveryIntent.code);
+          } else if (passwordRecoveryIntent.kind === 'implicit') {
+            recoveryState = await window.TriAxisAuth.setRecoverySession(
+              passwordRecoveryIntent.accessToken,
+              passwordRecoveryIntent.refreshToken
+            );
+          }
+          recoveredSession = recoveryState?.session || null;
+        } catch (error) {
+          passwordRecoveryProcessingError = true;
+          console.error('Falha ao validar link de recuperação:', error);
+        }
+      }
+      if (passwordRecoveryUrlMarker) cleanPasswordRecoveryUrlCredentials();
+      passwordRecoveryUrlProcessing = false;
+
+      if (passwordRecoveryUrlError || passwordRecoveryProcessingError || (passwordRecoveryUrlMarker && !passwordRecoveryIntent)) {
+        showPasswordRecoveryUrlError();
+      } else if (passwordRecoveryIntent) {
+        if (!passwordRecoveryMode && !enterPasswordRecoveryMode(recoveredSession)) showPasswordRecoveryUrlError();
+      }
     } catch (err) {
       console.error('Falha ao iniciar autenticação Supabase:', err);
+      passwordRecoveryUrlProcessing = false;
       applyRemoteAuthState({ session: null, profile: null, roles: [] });
-      if (passwordRecoveryUrlError) {
+      if (passwordRecoveryUrlMarker) cleanPasswordRecoveryUrlCredentials();
+      if (passwordRecoveryUrlError || passwordRecoveryUrlMarker) {
         showPasswordRecoveryUrlError();
       } else {
         setLoginStatus('SERVIÇO DE LOGIN TEMPORARIAMENTE INDISPONÍVEL.', 'error');

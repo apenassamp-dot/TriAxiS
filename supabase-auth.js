@@ -40,7 +40,7 @@
     });
   }
 
-  async function initialize(onChange, onAuthEvent) {
+  async function initialize(onChange, onAuthEvent, options = {}) {
     const config = window.TRIAXIS_SUPABASE_CONFIG;
     if (!config?.url || !config?.publishableKey) throw new Error('SUPABASE_CONFIG_MISSING');
     if (!window.supabase?.createClient) throw new Error('SUPABASE_SDK_MISSING');
@@ -51,7 +51,7 @@
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true
+        detectSessionInUrl: options.detectSessionInUrl !== false
       }
     });
 
@@ -147,9 +147,103 @@
     if (error) throw error;
   }
 
+  function isValidRecoveryCredential(value) {
+    const normalized = String(value || '').trim();
+    return normalized.length >= 8 && normalized.length <= 4096 && /^[A-Za-z0-9._~+/=-]+$/.test(normalized);
+  }
+
+  async function restorePreviousSession(previousSession) {
+    const api = requireClient();
+    let activeSession = null;
+    try {
+      const { data } = await api.auth.getSession();
+      activeSession = data?.session || null;
+    } catch (error) {}
+    if (
+      activeSession?.user?.id === previousSession?.user?.id &&
+      activeSession?.access_token === previousSession?.access_token
+    ) return;
+
+    if (previousSession?.access_token && previousSession?.refresh_token) {
+      const { data, error } = await api.auth.setSession({
+        access_token: previousSession.access_token,
+        refresh_token: previousSession.refresh_token
+      });
+      if (error || !data?.session?.user?.id) throw error || new Error('PREVIOUS_SESSION_RESTORE_FAILED');
+      await loadAuthenticatedState(data.session);
+      return;
+    }
+
+    const { error } = await api.auth.signOut({ scope: 'local' });
+    if (error) throw error;
+    publishState({ session: null, profile: null, roles: [] });
+  }
+
+  async function runRecoverySessionExchange(exchange) {
+    const previousSession = currentState.session || null;
+    try {
+      const session = await exchange(requireClient());
+      if (!session?.user?.id) throw new Error('RECOVERY_SESSION_MISSING');
+      return loadAuthenticatedState(session);
+    } catch (error) {
+      try {
+        await restorePreviousSession(previousSession);
+      } catch (restoreError) {
+        console.error('Falha ao restaurar sessão anterior após link inválido:', restoreError);
+      }
+      throw error;
+    }
+  }
+
+  async function exchangeRecoveryCode(code) {
+    const normalizedCode = String(code || '').trim();
+    if (!isValidRecoveryCredential(normalizedCode)) throw new Error('INVALID_RECOVERY_CODE');
+    return runRecoverySessionExchange(async (api) => {
+      const { data, error } = await api.auth.exchangeCodeForSession(normalizedCode);
+      if (error) throw error;
+      return data?.session || null;
+    });
+  }
+
+  async function setRecoverySession(accessToken, refreshToken) {
+    const normalizedAccessToken = String(accessToken || '').trim();
+    const normalizedRefreshToken = String(refreshToken || '').trim();
+    if (!isValidRecoveryCredential(normalizedAccessToken) || !isValidRecoveryCredential(normalizedRefreshToken)) {
+      throw new Error('INVALID_RECOVERY_SESSION_TOKENS');
+    }
+    return runRecoverySessionExchange(async (api) => {
+      const { data, error } = await api.auth.setSession({
+        access_token: normalizedAccessToken,
+        refresh_token: normalizedRefreshToken
+      });
+      if (error) throw error;
+      return data?.session || null;
+    });
+  }
+
+  async function verifyRecoveryTokenHash(tokenHash) {
+    const normalizedTokenHash = String(tokenHash || '').trim();
+    if (!isValidRecoveryCredential(normalizedTokenHash)) throw new Error('INVALID_RECOVERY_TOKEN_HASH');
+    return runRecoverySessionExchange(async (api) => {
+      const { data, error } = await api.auth.verifyOtp({
+        token_hash: normalizedTokenHash,
+        type: 'recovery'
+      });
+      if (error) throw error;
+      let session = data?.session || null;
+      if (!session?.user?.id) {
+        const { data: sessionData, error: sessionError } = await api.auth.getSession();
+        if (sessionError) throw sessionError;
+        session = sessionData?.session || null;
+      }
+      return session;
+    });
+  }
+
   async function updatePassword(password) {
     const normalizedPassword = String(password || '');
     if (normalizedPassword.length < 8 || normalizedPassword.length > 72) throw new Error('INVALID_RECOVERY_PASSWORD');
+    if (!currentState.session?.user?.id) throw new Error('RECOVERY_SESSION_MISSING');
     const { data, error } = await requireClient().auth.updateUser({ password: normalizedPassword });
     if (error) throw error;
     return data?.user || null;
@@ -161,6 +255,9 @@
     signUp,
     signOut,
     requestPasswordReset,
+    exchangeRecoveryCode,
+    setRecoverySession,
+    verifyRecoveryTokenHash,
     updatePassword,
     getClient: () => requireClient(),
     getState: () => currentState,

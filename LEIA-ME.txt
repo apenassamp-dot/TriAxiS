@@ -38,6 +38,7 @@ RECUPERAÇÃO DE SENHA
 - O endereço publicado deve estar autorizado em Supabase > Authentication > URL Configuration.
 - Site URL: https://apenassamp-dot.github.io/TriAxiS/
 - Redirect URL: https://apenassamp-dot.github.io/TriAxiS/**
+- No template de e-mail Recovery, o botão/link deve usar {{ .ConfirmationURL }} para que o Supabase conclua a troca de credencial antes de abrir a nova senha.
 - A mensagem de solicitação é sempre neutra e não informa se um e-mail está cadastrado.
 - Links de recuperação expirados devem ser solicitados novamente.
 
