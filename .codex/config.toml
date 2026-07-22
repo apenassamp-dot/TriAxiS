@@ -1,8 +1,0 @@
-# Configuração opcional de subagentes do projeto.
-# Os valores padrão atuais já permitem subagentes, mas este arquivo deixa
-# o comportamento explícito e impede delegação recursiva.
-
-[agents]
-max_threads = 4
-max_depth = 1
-interrupt_message = true
