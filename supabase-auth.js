@@ -94,13 +94,19 @@
       return publishState({ session: null, profile: null, roles: [] });
     }
 
-    const [{ data: profile, error: profileError }, { data: roleRows, error: rolesError }] = await Promise.all([
+    const [
+      { data: profile, error: profileError },
+      { data: roleRows, error: rolesError },
+      { data: operationalRoleRows, error: operationalRolesError }
+    ] = await Promise.all([
       api.from('profiles').select('id, display_name, phone, tag, status, avatar_path, created_at, updated_at').eq('id', inputUserId).single(),
-      api.from('user_roles').select('role').eq('user_id', inputUserId)
+      api.from('user_roles').select('role').eq('user_id', inputUserId),
+      api.from('operational_user_roles').select('role').eq('user_id', inputUserId)
     ]);
     if (generation !== authGeneration) return currentState;
     if (profileError) throw profileError;
     if (rolesError) throw rolesError;
+    if (operationalRolesError) throw operationalRolesError;
 
     const { data: activeData, error: sessionError } = await api.auth.getSession();
     if (sessionError) throw sessionError;
@@ -108,7 +114,9 @@
     return publishState({
       session: activeData.session,
       profile,
-      roles: profile?.status === 'active' ? (roleRows || []).map((row) => row.role).filter(Boolean) : []
+      roles: profile?.status === 'active'
+        ? Array.from(new Set([...(roleRows || []), ...(operationalRoleRows || [])].map((row) => row.role).filter(Boolean)))
+        : []
     });
   }
 
@@ -377,7 +385,7 @@
     getClient: () => requireClient(),
     getState: () => currentState,
     isAdmin: () => currentState.roles.includes('admin'),
-    canAccessProduction: () => currentState.roles.some((role) => ['admin', 'production'].includes(role)),
-    isStaff: () => currentState.roles.some((role) => ['admin', 'production', 'support'].includes(role))
+    canAccessProduction: () => currentState.roles.some((role) => ['admin', 'commercial', 'finance', 'operations', 'production', 'logistics', 'support'].includes(role)),
+    isStaff: () => currentState.roles.some((role) => ['admin', 'commercial', 'finance', 'operations', 'production', 'logistics', 'support'].includes(role))
   });
 })();

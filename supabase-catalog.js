@@ -163,7 +163,14 @@
           size: record.size || '',
           specs: listValue(record.specs),
           materials: listValue(record.materials),
-          uses: listValue(record.uses)
+          uses: listValue(record.uses),
+          pricing: {
+            version: 'physical-v1',
+            variant: { standard: 0, blackout: 6, lab_access: 9, prototype: 4 },
+            material: { pla_fosco: 0, pla_vermelho: 5, resina: 15, prototipo: -3 },
+            finish: { simples: 0, premium: 12, scratch: 10, verniz: 8 },
+            accessory: { ball_chain: 3, argola: 1.5, mosquetao: 5, sem_corrente: 0 }
+          }
         },
         metadata: {
           catalog_id: record.id,

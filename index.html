@@ -765,12 +765,20 @@
         <input id="productionFilterText" class="toolbar-input" type="text" placeholder="Filtrar por agente, tag, produto ou QR" autocomplete="off">
         <select id="productionFilterStatus" class="toolbar-select">
           <option value="all">Todos os status</option>
-          <option value="Pendente">Pendente</option>
-          <option value="Modelagem">Modelagem</option>
-          <option value="Impressão">Impressão</option>
-          <option value="Pintura">Pintura</option>
-          <option value="Finalizado">Finalizado</option>
+          <option value="Pedido recebido">Pedido recebido</option>
+          <option value="Aguardando comprovação">Aguardando comprovação</option>
+          <option value="Comprovação recebida">Comprovação recebida</option>
+          <option value="Em validação">Em validação</option>
+          <option value="Aprovado para produção">Aprovado para produção</option>
+          <option value="Em produção">Em produção</option>
+          <option value="Pronto">Pronto</option>
+          <option value="Enviado">Enviado</option>
+          <option value="Disponível para retirada">Disponível para retirada</option>
           <option value="Entregue">Entregue</option>
+          <option value="Bloqueado">Bloqueado</option>
+          <option value="Reembolso pendente">Reembolso pendente</option>
+          <option value="Produção suspensa">Produção suspensa</option>
+          <option value="Entrega com problema">Entrega com problema</option>
         </select>
       </div>
 
@@ -1363,9 +1371,9 @@
 <script src="assets/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js" integrity="sha256-/anWf4DM5AdPeNY3O7E26Ew0yyNbipHF5ChAaNpt3EI=" crossorigin="anonymous"></script>
 <script src="supabase-config.js?v=20260714-fourth-review"></script>
-<script src="supabase-auth.js?v=20260714-fourth-review"></script>
-<script src="supabase-catalog.js?v=20260714-fourth-review"></script>
-<script src="supabase-orders.js?v=20260714-fourth-review"></script>
-<script src="script.js?v=20260714-fourth-review"></script>
+<script src="supabase-auth.js?v=20260722-protocol-v1"></script>
+<script src="supabase-catalog.js?v=20260722-protocol-v1"></script>
+<script src="supabase-orders.js?v=20260722-protocol-v1"></script>
+<script src="script.js?v=20260722-protocol-v1"></script>
 </body>
 </html>

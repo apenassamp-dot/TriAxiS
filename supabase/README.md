@@ -84,3 +84,32 @@ A política do Supabase Auth não é controlada por migration SQL. Em
 12 caracteres e, quando disponível no plano, proteção contra senhas vazadas.
 Mantenha confirmação de e-mail habilitada. Não considere isso aplicado antes de
 salvar e confirmar a configuração no painel.
+
+## Protocolo Operacional v1 — migration 004
+
+Depois da migration 003, execute `migrations/004_operational_protocol_v1.sql`.
+Ela preserva os estados legados para compatibilidade e adiciona o fluxo operacional
+centralizado, com:
+
+- estados normais e de exceção do pedido;
+- papéis separados para comercial, financeiro, operação, produção, logística e suporte;
+- preço autoritativo no servidor, incluindo variante, material, acabamento e acessório;
+- comprovante único, validação financeira e confirmação de capacidade antes da produção;
+- prazo, entrega, rastreio, responsáveis e histórico central com motivo obrigatório;
+- bloqueio do RPC legado que permitia mudar status sem os gates do protocolo.
+
+Use `set_operational_role(UUID, PAPEL, true)` com uma conta `admin` para atribuir
+os novos papéis. Os valores aceitos são `commercial`, `finance`, `operations`,
+`production`, `logistics` e `support`.
+
+Antes do beta, rode `tests/004_operational_protocol_v1_harness.sql` em um projeto
+Supabase isolado. Preencha os UUIDs QA indicados no início do arquivo. O harness
+cobre os dez cenários obrigatórios e termina com `ROLLBACK`.
+
+### Rollback da 004
+
+Em caso de reversão, faça backup, execute
+`rollback/004_operational_protocol_v1_rollback.sql` e reaplique imediatamente a
+migration 003. O rollback arquiva os dados v1 em
+`protocol_v1_rollback_archive` antes de remover as estruturas novas; não o execute
+em produção sem janela de manutenção e validação da restauração.

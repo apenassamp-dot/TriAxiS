@@ -141,7 +141,7 @@
     lab_access: { label: 'Lab Access', price: 9, desc: 'Mais técnica, com códigos, nível de acesso e visual de laboratório.' },
     prototype: { label: 'Prototype', price: 4, desc: 'Aparência industrial, marcações de teste e visual de protótipo.' }
   };
-  const PHYSICAL_STATUSES = ['Pendente', 'Modelagem', 'Impressão', 'Pintura', 'Em produção', 'Finalizado', 'Entregue'];
+  const PHYSICAL_STATUSES = ['Pedido recebido', 'Aguardando comprovação', 'Comprovação recebida', 'Em validação', 'Aprovado para produção', 'Em produção', 'Pronto', 'Enviado', 'Disponível para retirada', 'Entregue'];
 
 
   const CATALOG_META = {
@@ -1192,7 +1192,7 @@
           <p><b>Estimativa</b><span>${formatCurrencyBRL(req.estimatedPrice)}</span></p>
           ${req.notes ? `<p><b>Obs.</b><span>${escapeHtml(req.notes)}</span></p>` : ''}
         </div>
-        <select class="toolbar-select" data-request-status="${escapeHtml(req.id)}" ${hasRemoteRole('admin') || hasRemoteRole('production') ? '' : 'disabled'}>${renderPhysicalStatusOptions(req)}</select>
+        <select class="toolbar-select" data-request-status="${escapeHtml(req.id)}" ${canAccessProduction() ? '' : 'disabled'}>${renderPhysicalStatusOptions(req)}</select>
         <button class="btn btn-outline btn-sm" data-open-id="${escapeHtml(req.tag)}" type="button">ABRIR ID</button>
         ${req.remote ? '' : `<button class="btn btn-danger btn-sm" data-remove-request="${escapeHtml(req.id)}" type="button">REMOVER</button>`}
       </div>`).join('');
@@ -1202,8 +1202,8 @@
   }
 
   async function updatePhysicalRequestStatus(requestId, status) {
-    if (!hasRemoteRole('admin') && !hasRemoteRole('production')) {
-      showToast('PERMISSÃO DE PRODUÇÃO NECESSÁRIA', 'error');
+    if (!canAccessProduction()) {
+      showToast('PERMISSÃO OPERACIONAL NECESSÁRIA', 'error');
       return;
     }
     const req = physicalRequests.find(r => r.id === requestId);
@@ -1212,8 +1212,13 @@
       showToast('PEDIDO LOCAL LEGADO NÃO PODE ALTERAR A PRODUÇÃO REAL', 'error');
       return;
     }
+    const transition = collectOrderTransitionData(req, remoteStatus);
+    if (!transition) {
+      await refreshOrdersFromSupabase();
+      return;
+    }
     try {
-      await window.TriAxisOrders.setStatus(req.id, remoteStatus);
+      await window.TriAxisOrders.setStatus(req.id, remoteStatus, transition.reason, transition.data);
       await refreshOrdersFromSupabase();
       showToast('STATUS DA SOLICITAÇÃO ATUALIZADO');
     } catch (error) {
@@ -1221,6 +1226,60 @@
       await refreshOrdersFromSupabase();
       showToast('TRANSIÇÃO DE STATUS NÃO PERMITIDA', 'error');
     }
+  }
+
+  function collectOrderTransitionData(request, targetStatus) {
+    const reason = prompt('Motivo desta mudança de status (obrigatório):')?.trim();
+    if (!reason || reason.length < 3) {
+      showToast('A MUDANÇA EXIGE UM MOTIVO COM PELO MENOS 3 CARACTERES', 'error');
+      return null;
+    }
+    const data = {};
+    if (targetStatus === 'payment_received') {
+      data.payment_method = prompt('Forma de pagamento:')?.trim() || '';
+      data.payment_reference = prompt('Referência única da comprovação:')?.trim() || '';
+      data.payment_payer = prompt('Nome do pagador:')?.trim() || '';
+      data.payment_amount = Number(String(prompt(`Valor comprovado (total do pedido: ${formatCurrencyBRL(request.estimatedPrice)}):`) || '').replace(',', '.'));
+      if (!data.payment_method || !data.payment_reference || !data.payment_payer || !Number.isFinite(data.payment_amount) || data.payment_amount <= 0) {
+        showToast('DADOS DA COMPROVAÇÃO INCOMPLETOS', 'error');
+        return null;
+      }
+    }
+    if (targetStatus === 'approved_for_production') {
+      if (!confirm('Confirma que o pagamento foi validado e existe capacidade de produção para este pedido?')) return null;
+      data.capacity_confirmed = true;
+    }
+    if (targetStatus === 'in_production') {
+      data.production_due_at = prompt('Prazo prometido em ISO (ex.: 2026-08-01T18:00:00-03:00):')?.trim() || '';
+      if (!data.production_due_at || Number.isNaN(Date.parse(data.production_due_at))) {
+        showToast('PRAZO DE PRODUÇÃO INVÁLIDO', 'error');
+        return null;
+      }
+    }
+    if (targetStatus === 'shipped' || targetStatus === 'available_for_pickup') {
+      data.delivery_method = targetStatus === 'shipped' ? (prompt('Modalidade de envio:')?.trim() || '') : 'retirada';
+      data.tracking_code = targetStatus === 'shipped' ? (prompt('Código de rastreio:')?.trim() || '') : '';
+      const details = prompt('Dados/instruções de entrega ou retirada:')?.trim() || '';
+      data.delivery_details = { instructions: details };
+      if (!data.delivery_method || (targetStatus === 'shipped' && !data.tracking_code)) {
+        showToast('DADOS DE ENTREGA INCOMPLETOS', 'error');
+        return null;
+      }
+    }
+    if (targetStatus === 'cancelled' && ['in_production', 'production_suspended'].includes(request.remoteStatus)) {
+      data.decision_reference = prompt('Referência da decisão explícita de cancelamento:')?.trim() || '';
+      if (!data.decision_reference) {
+        showToast('CANCELAMENTO EM PRODUÇÃO EXIGE DECISÃO EXPLÍCITA', 'error');
+        return null;
+      }
+    }
+    return { reason, data };
+  }
+
+  function renderOrderHistory(request) {
+    if (!Array.isArray(request?.history) || !request.history.length) return '';
+    return `<details class="production-history"><summary>HISTÓRICO OPERACIONAL (${request.history.length})</summary>${request.history.map((item) => `
+      <p><b>${escapeHtml(window.TriAxisOrders?.labelForStatus?.(item.to_status) || item.to_status)}</b><span>${formatDate(item.created_at)} · ${formatTime(item.created_at)} · ${escapeHtml(item.reason)}</span></p>`).join('')}</details>`;
   }
 
   function removePhysicalRequest(requestId) {
@@ -1529,7 +1588,7 @@
   }
 
   function canAccessProduction() {
-    return hasRemoteRole('admin') || hasRemoteRole('production');
+    return remoteAuthState.roles.some((role) => ['admin', 'commercial', 'finance', 'operations', 'production', 'logistics', 'support'].includes(role));
   }
 
   function legacyPiiKeys() {
@@ -2318,13 +2377,16 @@
     const material = document.getElementById('catalogConfigMaterial')?.value || 'pla_fosco';
     const finish = document.getElementById('catalogConfigFinish')?.value || 'simples';
     const accessory = document.getElementById('catalogConfigAccessory')?.value || 'ball_chain';
-    const qty = Math.round(finiteNumber(document.getElementById('catalogConfigQty')?.value, 1, 1, 99));
+    const quantityInput = document.getElementById('catalogConfigQty');
+    const quantityValue = Number(quantityInput?.value);
+    const quantityValid = Number.isInteger(quantityValue) && quantityValue >= 1 && quantityValue <= 99;
+    const qty = quantityValid ? quantityValue : 0;
     const colorMain = document.getElementById('catalogConfigColorMain')?.value.trim() || 'Preto fosco';
     const colorAccent = document.getElementById('catalogConfigColorAccent')?.value.trim() || 'Vermelho TriAxis';
     const notes = (document.getElementById('catalogConfigNotes')?.value.trim() || '').slice(0, 1000);
     const unitPrice = estimatePhysicalPrice(material, finish, accessory, product.id, variant);
     const estimatedPrice = Math.round(unitPrice * qty * 100) / 100;
-    return { agentTag, agent, variant, material, finish, accessory, qty, colorMain, colorAccent, notes, unitPrice, estimatedPrice };
+    return { agentTag, agent, variant, material, finish, accessory, qty, quantityValid, colorMain, colorAccent, notes, unitPrice, estimatedPrice };
   }
 
   function updateCatalogConfigSummary(product) {
@@ -2334,7 +2396,7 @@
     const agentLabel = data.agent ? `${data.agent.name} ${data.agent.tag}` : 'sem agente vinculado';
     const summaryHtml = `
       <span>PREÇO ESTIMADO</span>
-      <strong>${formatCurrencyBRL(data.estimatedPrice)}</strong>
+      <strong>${data.quantityValid ? formatCurrencyBRL(data.estimatedPrice) : 'QUANTIDADE INVÁLIDA'}</strong>
       <small>${escapeHtml(product.name)} · ${escapeHtml(getVariantLabel(data.variant))}</small>
       <small>${escapeHtml(getPhysicalOptionLabel('material', data.material))} · ${escapeHtml(getPhysicalOptionLabel('finish', data.finish))} · ${data.qty} unidade${data.qty > 1 ? 's' : ''}</small>
       <small>Agente vinculado: ${escapeHtml(agentLabel)}</small>`;
@@ -2355,6 +2417,11 @@
     const validatedAgent = requirePurchaseValidation();
     if (!validatedAgent) return;
     const data = getCatalogConfigData(product);
+    if (!data.quantityValid) {
+      showToast('INFORME UMA QUANTIDADE INTEIRA ENTRE 1 E 99', 'error');
+      document.getElementById('catalogConfigQty')?.focus();
+      return;
+    }
     if (!data.agent || data.agent.tag !== validatedAgent.tag) {
       showToast('TAG VALIDADA NÃO CONFERE COM O PEDIDO', 'error');
       return;
@@ -2385,7 +2452,7 @@
       closeModal('modalCatalogConfig');
       await refreshOrdersFromSupabase();
       renderCatalog();
-      showToast(`PEDIDO ${result?.order_code || ''} ENVIADO PARA PRODUÇÃO`);
+      showToast(`PEDIDO ${result?.order_code || ''} REGISTRADO · AGUARDANDO COMPROVAÇÃO`);
       switchView('profile');
     } catch (error) {
       console.error('Falha ao enviar pedido do catálogo:', error);
@@ -3548,11 +3615,11 @@
     const revenue = matches.reduce((sum, req) => sum + Number(req.estimatedPrice || 0), 0);
     dash.innerHTML = `
       <div class="prod-stat"><span>TOTAL</span><strong>${matches.length}</strong></div>
-      <div class="prod-stat"><span>PENDENTE</span><strong>${count('Pendente')}</strong></div>
-      <div class="prod-stat"><span>MODELAGEM</span><strong>${count('Modelagem')}</strong></div>
-      <div class="prod-stat"><span>IMPRESSÃO</span><strong>${count('Impressão')}</strong></div>
-      <div class="prod-stat"><span>PINTURA</span><strong>${count('Pintura')}</strong></div>
-      <div class="prod-stat"><span>FINALIZADOS</span><strong>${count('Finalizado')}</strong></div>
+      <div class="prod-stat"><span>RECEBIDOS</span><strong>${count('Pedido recebido')}</strong></div>
+      <div class="prod-stat"><span>PAGAMENTO</span><strong>${count('Aguardando comprovação') + count('Comprovação recebida') + count('Em validação')}</strong></div>
+      <div class="prod-stat"><span>APROVADOS</span><strong>${count('Aprovado para produção')}</strong></div>
+      <div class="prod-stat"><span>EM PRODUÇÃO</span><strong>${count('Em produção')}</strong></div>
+      <div class="prod-stat"><span>PRONTOS</span><strong>${count('Pronto')}</strong></div>
       <div class="prod-stat"><span>ESTIMATIVA</span><strong>${formatCurrencyBRL(revenue)}</strong></div>`;
   }
 
@@ -3583,7 +3650,10 @@
           <p><b>Origem</b><span>${escapeHtml(req.origin || (req.orderCode ? 'Catálogo' : 'ID físico'))}</span></p>
           <p><b>Código</b><span>${escapeHtml(req.orderCode || req.id || '—')}</span></p>
           <p><b>Prazo</b><span>${escapeHtml(req.deadline || 'sob consulta')}</span></p>
+          ${req.paymentReference ? `<p><b>Comprovação</b><span>${escapeHtml(req.paymentReference)}</span></p>` : ''}
+          ${req.trackingCode ? `<p><b>Rastreio</b><span>${escapeHtml(req.trackingCode)}</span></p>` : ''}
         </div>
+        ${renderOrderHistory(req)}
         <div class="production-card-actions">
           <select class="toolbar-select" data-request-status="${escapeHtml(req.id)}">${renderPhysicalStatusOptions(req)}</select>
           <button class="btn btn-outline btn-sm" data-open-id="${escapeHtml(req.tag)}" type="button">ABRIR ID</button>
@@ -4138,7 +4208,7 @@
 
     const orders = getOrdersForAgent(agent.tag);
     const totalPieces = orders.reduce((sum, order) => sum + getOrderQuantity(order), 0);
-    const activeOrders = orders.filter((order) => !['Entregue', 'Finalizado'].includes(order.status)).length;
+    const activeOrders = orders.filter((order) => !['Entregue', 'Cancelado', 'Rejeitado', 'Reembolsado'].includes(order.status)).length;
     const statusHtml = PHYSICAL_STATUSES
       .map((status) => {
         const count = orders.filter((order) => order.status === status).length;
@@ -4163,6 +4233,7 @@
           <p><b>Estado</b><span>${escapeHtml(order.status || 'Pendente')} · ${escapeHtml(order.estimatedDays || order.deadline || 'prazo sob análise')}</span></p>
           <p><b>Estimativa</b><span>${formatCurrencyBRL(order.estimatedPrice || 0)}</span></p>
         </div>
+        ${renderOrderHistory(order)}
       </article>`).join('') : '<div class="profile-empty-orders">Nenhum pedido vinculado a esta tag ainda.</div>';
 
     container.innerHTML = `
@@ -4290,7 +4361,9 @@
     const size = document.getElementById('quoteSize')?.value || 'M';
     const material = document.getElementById('quoteMaterial')?.value || 'PLA';
     const finish = document.getElementById('quoteFinish')?.value || 'Bruto';
-    const qty = Math.round(finiteNumber(document.getElementById('quoteQty')?.value, 1, 1, 99));
+    const quantityValue = Number(document.getElementById('quoteQty')?.value);
+    const quantityValid = Number.isInteger(quantityValue) && quantityValue >= 1 && quantityValue <= 99;
+    const qty = quantityValid ? quantityValue : 0;
     const urgency = document.getElementById('quoteUrgency')?.value || 'normal';
     const notes = (document.getElementById('quoteNotes')?.value || '').slice(0, 1000);
     const base = { 'Vector Sigil': 24, 'Miniatura premium': 55, 'Protótipo técnico': 45, 'Badge / chaveiro': 18, 'Peça customizada': 65 }[product] || 45;
@@ -4303,11 +4376,17 @@
     const total = Math.round(unit * qty * discount * 100) / 100;
     const daysBase = { P: 1, M: 2, G: 4, XG: 7 }[size] || 2;
     const days = urgency === 'rush' ? Math.max(1, daysBase - 1) : urgency === 'fast' ? Math.max(1, daysBase) : daysBase + 1;
-    return { product, size, material, finish, qty, urgency, notes, total, days, unit: Math.round(unit * 100) / 100 };
+    return { product, size, material, finish, qty, quantityValid, urgency, notes, total, days, unit: Math.round(unit * 100) / 100 };
   }
 
   function renderQuoteEstimate() {
     const result = calculateQuote();
+    if (!result.quantityValid) {
+      setText('quotePrice', 'QUANTIDADE INVÁLIDA');
+      setText('quoteDeadline', 'Informe uma quantidade inteira entre 1 e 99.');
+      setText('quoteSummary', 'A estimativa não será calculada com quantidade fora do intervalo permitido.');
+      return;
+    }
     setText('quotePrice', formatCurrencyBRL(result.total));
     setText('quoteDeadline', `Prazo estimado: ${result.days} a ${result.days + 2} dias`);
     setText('quoteSummary', `${result.qty}× ${result.product} · ${result.size} · ${result.material} · ${result.finish} · unidade estimada ${formatCurrencyBRL(result.unit)}.`);
