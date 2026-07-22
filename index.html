@@ -289,7 +289,7 @@
 
               <div class="login-field-card">
                 <div class="login-field-head"><span>02</span><label for="createLoginNameInput">NOME OU APELIDO DO CLIENTE</label></div>
-                <input id="createLoginNameInput" type="text" placeholder="Ex: ApSamp" autocomplete="name" spellcheck="false" required>
+                <input id="createLoginNameInput" type="text" placeholder="Ex: ApSamp" autocomplete="name" spellcheck="false" maxlength="120" required>
               </div>
 
               <div class="login-field-card">
@@ -306,7 +306,7 @@
 
               <div class="login-field-card">
                 <div class="login-field-head"><span>04</span><label for="createLoginPhoneInput">NÚMERO DE TELEFONE</label></div>
-                <input id="createLoginPhoneInput" type="tel" placeholder="(00) 00000-0000" autocomplete="tel" required>
+                <input id="createLoginPhoneInput" type="tel" placeholder="(00) 00000-0000" autocomplete="tel" inputmode="tel" maxlength="32" pattern="[0-9+() .-]{8,32}" required>
               </div>
 
               <div class="login-field-card login-field-card--status">

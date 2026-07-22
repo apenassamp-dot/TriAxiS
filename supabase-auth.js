@@ -252,6 +252,7 @@
 
     const destination = new URL(String(redirectTo || ''), window.location.href);
     if (!['http:', 'https:'].includes(destination.protocol)) throw new Error('INVALID_RECOVERY_REDIRECT');
+    if (destination.origin !== window.location.origin) throw new Error('INVALID_RECOVERY_REDIRECT');
     destination.search = '';
     destination.hash = '';
 

@@ -2017,7 +2017,7 @@
       emailInput?.focus();
       return;
     }
-    if (!name) {
+    if (!name || name.length > 120) {
       setCreateLoginStatus('INFORME O NOME DO AGENTE PARA CRIAR O ID.', 'error');
       showToast('NOME OBRIGATÓRIO PARA CRIAR ID', 'error');
       nameInput?.focus();
@@ -2029,7 +2029,7 @@
       passInput?.focus();
       return;
     }
-    if (!phone) {
+    if (!phone || !/^[0-9+() .-]{8,32}$/.test(phone)) {
       setCreateLoginStatus('INFORME O TELEFONE PARA CRIAR O ID TRIAXIS.', 'error');
       showToast('TELEFONE OBRIGATÓRIO PARA CRIAR ID', 'error');
       phoneInput?.focus();
@@ -2294,10 +2294,10 @@
     const material = document.getElementById('catalogConfigMaterial')?.value || 'pla_fosco';
     const finish = document.getElementById('catalogConfigFinish')?.value || 'simples';
     const accessory = document.getElementById('catalogConfigAccessory')?.value || 'ball_chain';
-    const qty = Math.max(1, Math.min(99, Number(document.getElementById('catalogConfigQty')?.value || 1)));
+    const qty = Math.round(finiteNumber(document.getElementById('catalogConfigQty')?.value, 1, 1, 99));
     const colorMain = document.getElementById('catalogConfigColorMain')?.value.trim() || 'Preto fosco';
     const colorAccent = document.getElementById('catalogConfigColorAccent')?.value.trim() || 'Vermelho TriAxis';
-    const notes = document.getElementById('catalogConfigNotes')?.value.trim() || '';
+    const notes = (document.getElementById('catalogConfigNotes')?.value.trim() || '').slice(0, 1000);
     const unitPrice = estimatePhysicalPrice(material, finish, accessory, product.id, variant);
     const estimatedPrice = Math.round(unitPrice * qty * 100) / 100;
     return { agentTag, agent, variant, material, finish, accessory, qty, colorMain, colorAccent, notes, unitPrice, estimatedPrice };
@@ -2414,6 +2414,24 @@
     return /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|hsla?\([\d\s.,%]+\))$/i.test(color) ? color : '#E8001C';
   }
 
+  function finiteNumber(value, fallback, min, max) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.min(max, Math.max(min, number));
+  }
+
+  function safeCatalogAsset(value, fallback = 'assets/cybershape-unit.png') {
+    const source = String(value || '').trim();
+    if (!source || source.length > 2 * 1024 * 1024) return fallback;
+    if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(source)) return source;
+    if (/^assets\/[A-Za-z0-9._/-]+$/i.test(source)) return source;
+    try {
+      const url = new URL(source, window.location.href);
+      if (url.protocol === 'https:' && url.hostname === 'fnmbdgvatcxvxebvsyga.supabase.co') return url.href;
+    } catch (error) {}
+    return fallback;
+  }
+
   function slugifyCatalogId(value) {
     const normalized = String(value || '')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -2424,14 +2442,14 @@
   function normalizeCatalogAdminRecord(record = {}, index = 0) {
     const id = slugifyCatalogId(record.id || record.name || `produto_${index + 1}`);
     const category = slugifyCatalogId(record.category || 'services');
-    const img = String(record.img || record.gallery?.[0] || 'assets/cybershape-unit.png');
+    const img = safeCatalogAsset(record.img || record.gallery?.[0]);
     return {
       id,
       remoteId: record.remoteId || null,
       name: String(record.name || 'Novo artefato').trim() || 'Novo artefato',
       line: String(record.line || 'TRIAXIS PRODUCT').trim() || 'TRIAXIS PRODUCT',
       img,
-      basePrice: Math.max(0, Number(record.basePrice || 0)),
+      basePrice: finiteNumber(record.basePrice, 0, 0, 10000000),
       productionTime: String(record.productionTime || 'sob consulta').trim() || 'sob consulta',
       description: String(record.description || 'Artefato físico desenvolvido pelo laboratório TriAxis.').trim(),
       specs: toStringList(record.specs, ['Produção TriAxis']),
@@ -2445,10 +2463,10 @@
       size: String(record.size || 'Sob consulta').trim(),
       materials: toStringList(record.materials, ['PLA', 'Resina']),
       uses: toStringList(record.uses, ['Produto personalizado']),
-      gallery: Array.from(new Set(toStringList(record.gallery, [img]).concat([img]))).filter(Boolean),
+      gallery: Array.from(new Set(toStringList(record.gallery, [img]).map(source => safeCatalogAsset(source, img)).concat([img]))).filter(Boolean),
       hidden: Boolean(record.hidden),
       featured: Boolean(record.featured),
-      priority: Number.isFinite(Number(record.priority)) ? Number(record.priority) : index,
+      priority: finiteNumber(record.priority, index, 0, 9999),
       promoLabel: String(record.promoLabel || '').trim(),
       ctaLabel: String(record.ctaLabel || 'SOLICITAR ARTEFATO').trim() || 'SOLICITAR ARTEFATO',
       cardStyle: ['standard', 'technical', 'spotlight', 'minimal'].includes(record.cardStyle) ? record.cardStyle : 'standard',
@@ -3438,11 +3456,17 @@
   function importCatalogAdminData(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('ARQUIVO DE CATÁLOGO MUITO GRANDE', 'error');
+      event.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async loadEvent => {
       const snapshot = snapshotCatalogState();
       try {
         const data = JSON.parse(loadEvent.target.result);
+        if (Array.isArray(data.products) && data.products.length > 500) throw new Error('CATALOG_TOO_LARGE');
         if (!Array.isArray(data.products) || !data.products.length) throw new Error('Catálogo sem produtos');
         applyCatalogAdminRecords(data.products);
         catalogLayout = normalizeCatalogLayout(data.layout || catalogLayout);
@@ -3934,6 +3958,11 @@
   function importData(e) {
     const file = e.target.files[0];
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('ARQUIVO DE BACKUP MUITO GRANDE', 'error');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async function (ev) {
       const storageKeys = [CATALOG_ADMIN_STORAGE_KEY, SETTINGS_KEY];
@@ -4214,9 +4243,9 @@
     const size = document.getElementById('quoteSize')?.value || 'M';
     const material = document.getElementById('quoteMaterial')?.value || 'PLA';
     const finish = document.getElementById('quoteFinish')?.value || 'Bruto';
-    const qty = Math.max(1, Math.min(99, Number(document.getElementById('quoteQty')?.value || 1)));
+    const qty = Math.round(finiteNumber(document.getElementById('quoteQty')?.value, 1, 1, 99));
     const urgency = document.getElementById('quoteUrgency')?.value || 'normal';
-    const notes = document.getElementById('quoteNotes')?.value || '';
+    const notes = (document.getElementById('quoteNotes')?.value || '').slice(0, 1000);
     const base = { 'Vector Sigil': 24, 'Miniatura premium': 55, 'Protótipo técnico': 45, 'Badge / chaveiro': 18, 'Peça customizada': 65 }[product] || 45;
     const sizeAdd = { P: 0, M: 18, G: 45, XG: 95 }[size] || 18;
     const materialAdd = { 'PLA': 0, 'PLA+': 8, 'Resina': 22, 'Protótipo econômico': -8 }[material] || 0;
