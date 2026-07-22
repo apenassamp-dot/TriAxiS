@@ -118,7 +118,12 @@ begin
       image_order := 0;
       for image_path in select value from jsonb_array_elements_text(item_metadata -> 'storage_paths')
       loop
-        if image_path like 'catalog/%' and char_length(image_path) <= 500 then
+        image_path := btrim(image_path);
+        if image_path ~ '^catalog/[a-z0-9][a-z0-9-]{0,79}/[a-zA-Z0-9_-]{8,80}\.(jpg|jpeg|png|webp|gif)$'
+           and image_path not like '%..%'
+           and image_path not like '%//%'
+           and image_path not like '%\\%'
+           and char_length(image_path) <= 180 then
           insert into public.product_images (product_id, storage_path, alt_text, sort_order)
           values (item_product_id, image_path, item_name, image_order)
           on conflict (product_id, storage_path) do nothing;

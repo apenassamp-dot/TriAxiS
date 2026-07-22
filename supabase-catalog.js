@@ -84,7 +84,11 @@
     if (index < 0) return null;
     const activeMarker = value.includes(marker) ? marker : signedMarker;
     const path = decodeURIComponent(value.slice(index + activeMarker.length).split('?')[0]);
-    return path.startsWith('catalog/') ? path : null;
+    return /^catalog\/[a-z0-9][a-z0-9-]{0,79}\/[a-zA-Z0-9_-]{8,80}\.(jpg|jpeg|png|webp|gif)$/i.test(path) && !path.includes('..') && !path.includes('//') && !path.includes('\\') ? path : null;
+  }
+
+  function isValidStoragePath(path) {
+    return /^catalog\/[a-z0-9][a-z0-9-]{0,79}\/[a-zA-Z0-9_-]{8,80}\.(jpg|jpeg|png|webp|gif)$/i.test(String(path || ''));
   }
 
   async function removeUnlinkedUploads(paths) {
@@ -200,6 +204,7 @@
         const paths = listValue(row.product_images).sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
         const signedImages = [];
         for (const image of paths) {
+          if (!isValidStoragePath(image.storage_path)) throw new Error('CATALOG_STORAGE_PATH_INVALID');
           const { data, error } = await api.storage.from(PRODUCT_BUCKET).createSignedUrl(image.storage_path, SIGNED_URL_TTL_SECONDS);
           if (error) throw error;
           if (data?.signedUrl) signedImages.push(data.signedUrl);

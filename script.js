@@ -610,6 +610,10 @@
       return;
     }
     container.innerHTML = matches.map(renderAgentResultCard).join('');
+    container.querySelectorAll('.result-photo').forEach((el, index) => {
+      const photo = sanitizePhotoDataUrl(matches[index]?.photo);
+      if (photo) el.style.backgroundImage = `url("${photo}")`;
+    });
     container.querySelectorAll('[data-open-id]').forEach((el) => {
       el.addEventListener('click', () => openIdCard(el.getAttribute('data-open-id')));
     });
@@ -620,11 +624,10 @@
   }
 
   function renderAgentResultCard(agent) {
-    const photoStyle = agent.photo ? `style="background-image:url(${agent.photo})"` : '';
     const initials = agent.photo ? '' : getInitialsAvatar(agent.name);
     return `
       <div class="result-card">
-        <div class="result-photo" ${photoStyle}>${initials}</div>
+        <div class="result-photo">${initials}</div>
         <div class="result-info">
           <div class="result-name">${escapeHtml(agent.name)}</div>
           <div class="result-tag" data-open-id="${escapeHtml(agent.tag)}">${escapeHtml(agent.tag)}</div>
@@ -870,14 +873,17 @@
     if (visibleAgents.length === 0) { grid.innerHTML = ''; empty.classList.add('visible'); return; }
     empty.classList.remove('visible');
     grid.innerHTML = visibleAgents.map((agent) => {
-      const photoStyle = agent.photo ? `style="background-image:url(${agent.photo})"` : '';
       const initials = agent.photo ? '' : getInitialsAvatar(agent.name);
       return `
         <div class="agent-card agent-card--compact">
-          <button class="agent-card-photo agent-card-photo--button" ${photoStyle} data-expand-agent="${escapeHtml(agent.tag)}" type="button" aria-label="Expandir ID de ${escapeHtml(agent.name)}">${initials}</button>
+          <button class="agent-card-photo agent-card-photo--button" data-expand-agent="${escapeHtml(agent.tag)}" type="button" aria-label="Expandir ID de ${escapeHtml(agent.name)}">${initials}</button>
           <button class="btn btn-primary btn-block agent-expand-btn" data-expand-agent="${escapeHtml(agent.tag)}" type="button">EXPANDIR ID</button>
         </div>`;
     }).join('');
+    grid.querySelectorAll('.agent-card-photo').forEach((el, index) => {
+      const photo = sanitizePhotoDataUrl(visibleAgents[index]?.photo);
+      if (photo) el.style.backgroundImage = `url("${photo}")`;
+    });
     grid.querySelectorAll('[data-expand-agent]').forEach((btn) => btn.addEventListener('click', () => openBankAgentModal(btn.getAttribute('data-expand-agent'))));
   }
 
@@ -1448,9 +1454,19 @@
     return vault[normalizeTagInput(tag)] || null;
   }
 
+  const PASSWORD_KDF_ITERATIONS = 250000;
+
+  async function pbkdf2Hex(password, salt, iterations = PASSWORD_KDF_ITERATIONS) {
+    if (!window.crypto?.subtle || !window.TextEncoder) throw new Error('Web Crypto indisponível');
+    const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(password || '')), 'PBKDF2', false, ['deriveBits']);
+    const saltBytes = new Uint8Array((String(salt || '').match(/.{2}/g) || []).map(pair => parseInt(pair, 16)));
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: saltBytes, iterations, hash: 'SHA-256' }, material, 256);
+    return Array.from(new Uint8Array(bits), byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
   async function hashPasswordForAgent(tag, password, salt) {
     const normalizedTag = normalizeTagInput(tag);
-    return sha256Hex(`TRIAXIS::ACCESS::${normalizedTag}::${salt}::${password}`);
+    return pbkdf2Hex(`TRIAXIS::ACCESS::${normalizedTag}::${password}`, salt);
   }
 
   async function createPasswordRecord(tag, password) {
@@ -1459,7 +1475,8 @@
     const salt = randomHex(16);
     const hash = await hashPasswordForAgent(normalizedTag, password, salt);
     vault[normalizedTag] = {
-      algo: 'SHA-256',
+      algo: 'PBKDF2-SHA-256',
+      iterations: PASSWORD_KDF_ITERATIONS,
       salt,
       hash,
       createdAt: new Date().toISOString(),
@@ -1472,8 +1489,15 @@
   async function verifyPasswordRecord(tag, password) {
     const record = getPasswordRecord(tag);
     if (!record?.salt || !record?.hash) return false;
-    const hash = await hashPasswordForAgent(tag, password, record.salt);
-    return hash === record.hash;
+    if (record.algo === 'PBKDF2-SHA-256') {
+      const iterations = Number(record.iterations);
+      if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 1000000) return false;
+      const hash = await pbkdf2Hex(`TRIAXIS::ACCESS::${normalizeTagInput(tag)}::${password}`, record.salt, iterations);
+      return hash === record.hash;
+    }
+    const legacyHash = await sha256Hex(`TRIAXIS::ACCESS::${normalizeTagInput(tag)}::${record.salt}::${password}`);
+    if (legacyHash !== record.hash) return false;
+    return Boolean(await createPasswordRecord(tag, password));
   }
 
   function mapRemoteProfileToAgent(profile = remoteAuthState.profile) {
@@ -3929,7 +3953,9 @@
   }
 
   function isValidPasswordRecord(record) {
-    return record?.algo === 'SHA-256' && /^[a-f0-9]{32}$/i.test(record.salt || '') && /^[a-f0-9]{64}$/i.test(record.hash || '');
+    const validShape = /^[a-f0-9]{32}$/i.test(record?.salt || '') && /^[a-f0-9]{64}$/i.test(record?.hash || '');
+    if (record?.algo === 'SHA-256') return validShape;
+    return record?.algo === 'PBKDF2-SHA-256' && Number.isInteger(Number(record.iterations)) && Number(record.iterations) >= 100000 && Number(record.iterations) <= 1000000 && validShape;
   }
 
   function getStorageSnapshot(keys) {
@@ -3955,6 +3981,27 @@
     showToast('BACKUP EXPORTADO COM SUCESSO');
   }
 
+  function validateBackupPayload(data) {
+    const dangerousKeys = new Set(['__proto__', 'prototype', 'constructor']);
+    const walk = (value, depth = 0) => {
+      if (depth > 8) throw new Error('BACKUP_DEPTH_LIMIT');
+      if (typeof value === 'string' && value.length > 10000) throw new Error('BACKUP_STRING_LIMIT');
+      if (Array.isArray(value)) {
+        if (value.length > 500) throw new Error('BACKUP_ARRAY_LIMIT');
+        value.forEach(item => walk(item, depth + 1));
+      } else if (value && typeof value === 'object') {
+        Object.entries(value).forEach(([key, item]) => {
+          if (dangerousKeys.has(key)) throw new Error('BACKUP_KEY_INVALID');
+          walk(item, depth + 1);
+        });
+      }
+    };
+    if (!data || typeof data !== 'object' || Array.isArray(data) || data.version !== 5) throw new Error('BACKUP_FORMAT_INVALID');
+    walk(data);
+    if (!data.catalogState || !Array.isArray(data.catalogState.products) || data.catalogState.products.length > 500) throw new Error('BACKUP_CATALOG_INVALID');
+    return data;
+  }
+
   function importData(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -3974,7 +4021,7 @@
         const envelope = JSON.parse(ev.target.result);
         const password = prompt('Informe a senha deste backup:');
         if (password === null) { e.target.value = ''; return; }
-        const data = await decryptBackupPayload(envelope, password);
+        const data = validateBackupPayload(await decryptBackupPayload(envelope, password));
         // Backups antigos continuam legíveis, mas PII, pedidos e credenciais locais não voltam a ser fonte ativa.
         data.agents = [];
         data.physicalRequests = [];
