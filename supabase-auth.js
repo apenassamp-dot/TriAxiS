@@ -8,6 +8,63 @@
   let authGeneration = 0;
   let activeLoad = null;
 
+  // Keep bursts of Supabase traffic from exhausting the browser connection
+  // pool or triggering avoidable API throttling. The queue is intentionally
+  // small so a stalled page fails fast instead of growing unbounded memory.
+  const REQUEST_MIN_INTERVAL_MS = 150;
+  const REQUEST_MAX_CONCURRENT = 4;
+  const REQUEST_MAX_QUEUE = 40;
+  const REQUEST_MAX_RETRIES = 2;
+  const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
+  const requestQueue = [];
+  let activeRequests = 0;
+  let lastRequestStartedAt = 0;
+
+  function retryDelay(response, attempt) {
+    const retryAfter = Number(response.headers?.get?.('retry-after'));
+    if (Number.isFinite(retryAfter) && retryAfter >= 0) return Math.min(retryAfter * 1000, 8000);
+    return Math.min(500 * (2 ** attempt), 4000);
+  }
+
+  function pumpRequestQueue() {
+    while (activeRequests < REQUEST_MAX_CONCURRENT && requestQueue.length) {
+      const task = requestQueue.shift();
+      activeRequests += 1;
+      const scheduledStartAt = Math.max(Date.now(), lastRequestStartedAt + REQUEST_MIN_INTERVAL_MS);
+      const wait = Math.max(0, scheduledStartAt - Date.now());
+      lastRequestStartedAt = scheduledStartAt;
+      window.setTimeout(async () => {
+        try {
+          const method = String(task.init?.method || 'GET').toUpperCase();
+          const canRetry = ['GET', 'HEAD', 'OPTIONS'].includes(method);
+          let response;
+          for (let attempt = 0; ; attempt += 1) {
+            response = await task.baseFetch(task.input, task.init);
+            if (!canRetry || !RETRYABLE_STATUS.has(response.status) || attempt >= REQUEST_MAX_RETRIES) break;
+            await new Promise((resolve) => window.setTimeout(resolve, retryDelay(response, attempt)));
+          }
+          task.resolve(response);
+        } catch (error) {
+          task.reject(error);
+        } finally {
+          activeRequests -= 1;
+          pumpRequestQueue();
+        }
+      }, wait);
+    }
+  }
+
+  function rateLimitedFetch(input, init = {}) {
+    return new Promise((resolve, reject) => {
+      if (requestQueue.length >= REQUEST_MAX_QUEUE) {
+        reject(new Error('SUPABASE_REQUEST_QUEUE_FULL'));
+        return;
+      }
+      requestQueue.push({ input, init, resolve, reject, baseFetch: window.fetch.bind(window) });
+      pumpRequestQueue();
+    });
+  }
+
   function requireClient() {
     if (!client) throw new Error('SUPABASE_NOT_INITIALIZED');
     return client;
@@ -84,6 +141,7 @@
     changeHandler = typeof onChange === 'function' ? onChange : null;
     authEventHandler = typeof onAuthEvent === 'function' ? onAuthEvent : null;
     client = window.supabase.createClient(config.url, config.publishableKey, {
+      global: { fetch: rateLimitedFetch },
       auth: {
         persistSession: true,
         autoRefreshToken: true,
