@@ -103,8 +103,23 @@ os novos papéis. Os valores aceitos são `commercial`, `finance`, `operations`,
 `production`, `logistics` e `support`.
 
 Antes do beta, rode `tests/004_operational_protocol_v1_harness.sql` em um projeto
-Supabase isolado. Preencha os UUIDs QA indicados no início do arquivo. O harness
-cobre os dez cenários obrigatórios e termina com `ROLLBACK`.
+Supabase isolado, depois das migrations 004 e 005. Preencha os UUIDs QA indicados
+no início do arquivo, incluindo dois atores financeiros e dois logísticos. O
+harness cobre os dez cenários obrigatórios, os gates adicionais da 005 e termina
+com `ROLLBACK`.
+
+## Segregação de atores e evidência de reembolso — migration 005
+
+Depois da migration 004, execute
+`migrations/005_actor_separation_refund_evidence.sql`.
+
+A migration mantém contas multipapel, mas impede que o mesmo usuário execute
+etapas críticas consecutivas do mesmo pedido: recebimento/validação do pagamento,
+validação/aprovação, aprovação/produção, produção/expedição,
+expedição/entrega e solicitação/processamento do reembolso.
+
+Para solicitar reembolso, informe valor e destinatário. Para concluir, outro ator
+financeiro deve registrar referência única e data de processamento.
 
 ### Rollback da 004
 

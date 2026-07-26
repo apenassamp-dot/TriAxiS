@@ -1,5 +1,5 @@
 -- Harness do Protocolo Operacional v1 (10 cenários obrigatórios).
--- Executar somente em projeto Supabase isolado, depois da migration 004.
+-- Executar somente em projeto Supabase isolado, depois das migrations 004 e 005.
 -- Preencha as configurações abaixo com contas QA ativas e um produto publicado.
 -- O ROLLBACK final impede persistência dos pedidos e papéis de teste.
 
@@ -10,9 +10,11 @@ begin;
 -- set local triaxis.qa_customer = '00000000-0000-0000-0000-000000000002';
 -- set local triaxis.qa_commercial = '00000000-0000-0000-0000-000000000003';
 -- set local triaxis.qa_finance = '00000000-0000-0000-0000-000000000004';
+-- set local triaxis.qa_finance_checker = '00000000-0000-0000-0000-00000000000a';
 -- set local triaxis.qa_operations = '00000000-0000-0000-0000-000000000005';
 -- set local triaxis.qa_production = '00000000-0000-0000-0000-000000000006';
 -- set local triaxis.qa_logistics = '00000000-0000-0000-0000-000000000007';
+-- set local triaxis.qa_logistics_checker = '00000000-0000-0000-0000-00000000000b';
 -- set local triaxis.qa_support = '00000000-0000-0000-0000-000000000008';
 -- set local triaxis.qa_product = '00000000-0000-0000-0000-000000000009';
 
@@ -45,17 +47,21 @@ declare
   admin_id uuid := pg_temp.qa_uuid('triaxis.qa_admin');
   commercial_id uuid := pg_temp.qa_uuid('triaxis.qa_commercial');
   finance_id uuid := pg_temp.qa_uuid('triaxis.qa_finance');
+  finance_checker_id uuid := pg_temp.qa_uuid('triaxis.qa_finance_checker');
   operations_id uuid := pg_temp.qa_uuid('triaxis.qa_operations');
   production_id uuid := pg_temp.qa_uuid('triaxis.qa_production');
   logistics_id uuid := pg_temp.qa_uuid('triaxis.qa_logistics');
+  logistics_checker_id uuid := pg_temp.qa_uuid('triaxis.qa_logistics_checker');
   support_id uuid := pg_temp.qa_uuid('triaxis.qa_support');
 begin
   perform pg_temp.as_user(admin_id);
   perform public.set_operational_role(commercial_id, 'commercial', true);
   perform public.set_operational_role(finance_id, 'finance', true);
+  perform public.set_operational_role(finance_checker_id, 'finance', true);
   perform public.set_operational_role(operations_id, 'operations', true);
   perform public.set_operational_role(production_id, 'production', true);
   perform public.set_operational_role(logistics_id, 'logistics', true);
+  perform public.set_operational_role(logistics_checker_id, 'logistics', true);
   perform public.set_operational_role(support_id, 'support', true);
 end;
 $$;
@@ -85,6 +91,7 @@ begin
   perform public.transition_order_v1(order_id, 'payment_received', 'Comprovação QA recebida.',
     jsonb_build_object('payment_method','pix','payment_reference',payment_reference,
       'payment_payer','Cliente QA','payment_amount',expected_total));
+  perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_finance_checker'));
   perform public.transition_order_v1(order_id, 'payment_validation', 'Pagamento QA validado.', '{}');
   perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_operations'));
   perform public.transition_order_v1(order_id, 'approved_for_production', 'Capacidade QA confirmada.',
@@ -104,6 +111,8 @@ declare
   revised_order uuid := pg_temp.new_order(gen_random_uuid());
   defect_order uuid := pg_temp.new_order(gen_random_uuid());
   unauthorized_order uuid := pg_temp.new_order(gen_random_uuid());
+  separation_order uuid := pg_temp.new_order(gen_random_uuid());
+  refund_order uuid := pg_temp.new_order(gen_random_uuid());
   expected_total numeric;
   history_count integer;
 begin
@@ -116,6 +125,7 @@ begin
   perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_logistics'));
   perform public.transition_order_v1(normal_order, 'shipped', 'Pedido QA despachado.',
     '{"delivery_method":"transportadora","tracking_code":"QA-TRACK-001","delivery_details":{"city":"QA"}}');
+  perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_logistics_checker'));
   perform public.transition_order_v1(normal_order, 'delivered', 'Recebimento QA confirmado.', '{}');
   perform pg_temp.assert_true((select operational_status = 'delivered' from public.orders where id = normal_order), '1 normal até entrega');
 
@@ -137,6 +147,7 @@ begin
   perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_finance'));
   perform public.transition_order_v1(wrong_amount_order, 'payment_received', 'Valor divergente recebido.',
     '{"payment_method":"pix","payment_reference":"QA-WRONG-001","payment_payer":"Cliente QA","payment_amount":0.01}');
+  perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_finance_checker'));
   begin
     perform public.transition_order_v1(wrong_amount_order, 'payment_validation', 'Tentativa de validar valor divergente.', '{}');
     raise exception 'ASSERT_FAILED: 3 valor incorreto aceito';
@@ -227,6 +238,45 @@ begin
   select count(*) into history_count from public.order_operational_history where order_id = normal_order;
   perform pg_temp.assert_true((select operational_status = 'delivered' from public.orders where id = normal_order) and history_count >= 9,
     '10 persistência central após troca de sessão');
+
+  -- 005-A. A mesma pessoa não recebe e valida o pagamento.
+  perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_commercial'));
+  perform public.transition_order_v1(separation_order, 'awaiting_payment', 'Cobrança de segregação criada.', '{}');
+  select total into expected_total from public.orders where id = separation_order;
+  perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_finance'));
+  perform public.transition_order_v1(separation_order, 'payment_received', 'Pagamento para teste de segregação.',
+    jsonb_build_object('payment_method','pix','payment_reference','QA-SEP-001','payment_payer','Cliente QA','payment_amount',expected_total));
+  begin
+    perform public.transition_order_v1(separation_order, 'payment_validation', 'Mesmo ator tentou validar.', '{}');
+    raise exception 'ASSERT_FAILED: 005-A mesmo ator recebeu e validou pagamento';
+  exception when others then
+    if sqlerrm like 'ASSERT_FAILED:%' then raise; end if;
+    perform pg_temp.assert_true(sqlerrm like '%ACTOR_SEPARATION_PAYMENT_REQUIRED%', '005-A segregação de pagamento');
+  end;
+
+  -- 005-B. Reembolso exige evidência e outro ator para processar.
+  perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_commercial'));
+  perform public.transition_order_v1(refund_order, 'awaiting_payment', 'Cobrança para reembolso criada.', '{}');
+  select total into expected_total from public.orders where id = refund_order;
+  perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_finance'));
+  perform public.transition_order_v1(refund_order, 'payment_received', 'Pagamento sujeito a reembolso.',
+    jsonb_build_object('payment_method','pix','payment_reference','QA-REFUND-PAY-001','payment_payer','Cliente QA','payment_amount',expected_total));
+  perform public.transition_order_v1(refund_order, 'refund_pending', 'Cliente solicitou reembolso.',
+    jsonb_build_object('refund_amount',expected_total,'refund_recipient','Cliente QA'));
+  begin
+    perform public.transition_order_v1(refund_order, 'refunded', 'Mesmo ator tentou processar.',
+      jsonb_build_object('refund_reference','QA-REFUND-001','refund_processed_at',timezone('utc', now())));
+    raise exception 'ASSERT_FAILED: 005-B mesmo ator solicitou e processou reembolso';
+  exception when others then
+    if sqlerrm like 'ASSERT_FAILED:%' then raise; end if;
+    perform pg_temp.assert_true(sqlerrm like '%ACTOR_SEPARATION_REFUND_REQUIRED%', '005-B segregação de reembolso');
+  end;
+  perform pg_temp.as_user(pg_temp.qa_uuid('triaxis.qa_finance_checker'));
+  perform public.transition_order_v1(refund_order, 'refunded', 'Segundo ator processou reembolso.',
+    jsonb_build_object('refund_reference','QA-REFUND-001','refund_processed_at',timezone('utc', now())));
+  perform pg_temp.assert_true((select operational_status = 'refunded' and refund_reference = 'QA-REFUND-001'
+    and refund_processed_by = pg_temp.qa_uuid('triaxis.qa_finance_checker') from public.orders where id = refund_order),
+    '005-B evidência estruturada de reembolso');
 
   raise notice 'PROTOCOLO_V1_HARNESS_OK: 10/10 cenários aprovados; rollback será executado.';
 end;

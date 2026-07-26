@@ -206,6 +206,11 @@
       paymentMethod: row.payment_method || '',
       paymentReference: row.payment_reference || '',
       paymentPayer: row.payment_payer || '',
+      refundAmount: Number(row.refund_amount || 0),
+      refundReference: row.refund_reference || '',
+      refundRecipient: row.refund_recipient || '',
+      refundRequestedAt: row.refund_requested_at || null,
+      refundProcessedAt: row.refund_processed_at || null,
       paymentValidatedAt: row.payment_validated_at || null,
       approvedAt: row.approved_at || null,
       capacityConfirmedAt: row.capacity_confirmed_at || null,
@@ -223,7 +228,7 @@
     requireSession();
     const { data, error } = await requireClient()
       .from('orders')
-      .select('id, order_code, customer_id, status, operational_status, subtotal, discount, shipping_fee, total, customer_notes, submitted_at, created_at, payment_method, payment_reference, payment_payer, payment_validated_at, approved_at, capacity_confirmed_at, production_due_at, delivery_method, delivery_details, tracking_code, order_items(id, product_id, product_snapshot, quantity, configuration, unit_price, line_total), order_operational_history(id, from_status, to_status, changed_by, reason, metadata, created_at)')
+      .select('id, order_code, customer_id, status, operational_status, subtotal, discount, shipping_fee, total, customer_notes, submitted_at, created_at, payment_method, payment_reference, payment_payer, payment_validated_at, approved_at, capacity_confirmed_at, production_due_at, delivery_method, delivery_details, tracking_code, refund_amount, refund_reference, refund_recipient, refund_requested_at, refund_processed_at, order_items(id, product_id, product_snapshot, quantity, configuration, unit_price, line_total), order_operational_history(id, from_status, to_status, changed_by, reason, metadata, created_at)')
       .order('created_at', { ascending: false });
     if (error) throw error;
     const rows = data || [];

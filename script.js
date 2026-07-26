@@ -1266,6 +1266,22 @@
         return null;
       }
     }
+    if (targetStatus === 'refund_pending') {
+      data.refund_amount = Number(String(prompt(`Valor solicitado para reembolso (máximo: ${formatCurrencyBRL(request.estimatedPrice)}):`) || '').replace(',', '.'));
+      data.refund_recipient = prompt('Destinatário do reembolso:')?.trim() || '';
+      if (!Number.isFinite(data.refund_amount) || data.refund_amount <= 0 || data.refund_amount > Number(request.estimatedPrice || 0) || !data.refund_recipient) {
+        showToast('DADOS DA SOLICITAÇÃO DE REEMBOLSO INCOMPLETOS', 'error');
+        return null;
+      }
+    }
+    if (targetStatus === 'refunded') {
+      data.refund_reference = prompt('Referência única do reembolso processado:')?.trim() || '';
+      data.refund_processed_at = prompt('Data e hora do processamento em ISO:', new Date().toISOString())?.trim() || '';
+      if (!data.refund_reference || !data.refund_processed_at || Number.isNaN(Date.parse(data.refund_processed_at))) {
+        showToast('EVIDÊNCIA DO REEMBOLSO INCOMPLETA', 'error');
+        return null;
+      }
+    }
     if (targetStatus === 'cancelled' && ['in_production', 'production_suspended'].includes(request.remoteStatus)) {
       data.decision_reference = prompt('Referência da decisão explícita de cancelamento:')?.trim() || '';
       if (!data.decision_reference) {
@@ -3651,6 +3667,8 @@
           <p><b>Código</b><span>${escapeHtml(req.orderCode || req.id || '—')}</span></p>
           <p><b>Prazo</b><span>${escapeHtml(req.deadline || 'sob consulta')}</span></p>
           ${req.paymentReference ? `<p><b>Comprovação</b><span>${escapeHtml(req.paymentReference)}</span></p>` : ''}
+          ${req.refundRecipient ? `<p><b>Reembolso</b><span>${formatCurrencyBRL(req.refundAmount)} · ${escapeHtml(req.refundRecipient)}</span></p>` : ''}
+          ${req.refundReference ? `<p><b>Ref. reembolso</b><span>${escapeHtml(req.refundReference)}</span></p>` : ''}
           ${req.trackingCode ? `<p><b>Rastreio</b><span>${escapeHtml(req.trackingCode)}</span></p>` : ''}
         </div>
         ${renderOrderHistory(req)}
