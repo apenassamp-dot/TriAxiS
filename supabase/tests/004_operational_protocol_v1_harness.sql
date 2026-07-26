@@ -76,6 +76,12 @@ begin
     '{"variant":"standard","material":"pla_fosco","finish":"simples","accessory":"ball_chain","origin":"qa"}'::jsonb,
     'Pedido QA — migration 004', intent_key
   );
+  -- O harness cria mais pedidos do que o limite de 10 por cliente/10 minutos.
+  -- Retrodata somente os pedidos temporários desta transação para não mascarar
+  -- as asserções operacionais com o bloqueio de frequência do endpoint.
+  update public.orders
+  set submitted_at = timezone('utc', now()) - interval '11 minutes'
+  where id = result_id;
   return result_id;
 end;
 $$;

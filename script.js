@@ -2630,6 +2630,7 @@
     }
     CATALOG_PRODUCTS.splice(0, CATALOG_PRODUCTS.length, ...normalized.map(record => ({
       id: record.id,
+      remoteId: record.remoteId,
       name: record.name,
       line: record.line,
       img: record.img,
