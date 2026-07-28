@@ -32,7 +32,12 @@
     if (data?.error) throw new Error(data.error);
     let checkoutUrl;
     try { checkoutUrl = new URL(data?.checkoutUrl); } catch (error) { throw new Error('PAYMENT_CHECKOUT_URL_INVALID'); }
-    if (checkoutUrl.protocol !== 'https:' || !(checkoutUrl.hostname === 'mercadopago.com' || checkoutUrl.hostname.endsWith('.mercadopago.com'))) {
+    const hostname = checkoutUrl.hostname.toLowerCase();
+    const officialHost = hostname === 'mercadopago.com'
+      || hostname.endsWith('.mercadopago.com')
+      || hostname === 'mercadopago.com.br'
+      || hostname.endsWith('.mercadopago.com.br');
+    if (checkoutUrl.protocol !== 'https:' || !officialHost) {
       throw new Error('PAYMENT_CHECKOUT_URL_INVALID');
     }
     return checkoutUrl.href;
