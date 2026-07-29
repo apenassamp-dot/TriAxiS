@@ -16,9 +16,23 @@
 
 <link rel="icon" type="image/png" href="assets/mini-logo.png">
 <link rel="apple-touch-icon" href="assets/mini-logo.png">
-<link rel="stylesheet" href="style.css?v=20260714-fourth-review">
+<link rel="preload" as="image" href="assets/triaxis-nexus-home-logo.webp" type="image/webp" fetchpriority="high">
+<link rel="stylesheet" href="style.css?v=20260729-usability-v1">
 </head>
 <body>
+<svg class="icon-sprite" aria-hidden="true" focusable="false">
+  <symbol id="icon-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9.5 20v-6h5v6"/></symbol>
+  <symbol id="icon-profile" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.7-4 3.1-6 7-6s6.3 2 7 6"/></symbol>
+  <symbol id="icon-agents" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3.5 20c.5-4 2.3-6 5.5-6s5 2 5.5 6M14 15c3.5-.4 5.5 1.3 6 5"/></symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+  <symbol id="icon-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="1"/><circle cx="8.5" cy="11" r="2"/><path d="M5.5 16c.5-2 1.5-3 3-3s2.5 1 3 3M14 9h4M14 13h4"/></symbol>
+  <symbol id="icon-catalog" viewBox="0 0 24 24"><path d="M4 6.5 12 3l8 3.5v11L12 21l-8-3.5zM4 6.5l8 3.5 8-3.5M12 10v11"/></symbol>
+  <symbol id="icon-production" viewBox="0 0 24 24"><path d="M4 20V9l5 3V8l5 3V5h6v15zM8 17h2M13 17h2M18 17h2"/></symbol>
+  <symbol id="icon-quote" viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h2M14 15h1"/></symbol>
+  <symbol id="icon-verify" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v6h-6v-2"/></symbol>
+  <symbol id="icon-lab" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9c-.7 1.2.2 3 1.7 3h10.6c1.5 0 2.4-1.8 1.7-3l-5-9V3M8 15h8"/></symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></symbol>
+</svg>
 <div class="qa-environment-banner" role="status" aria-label="Ambiente de testes">
   QA · AMBIENTE DE TESTES · SEM PAGAMENTOS REAIS
 </div>
@@ -39,7 +53,7 @@
 
     <div class="sidebar-brand">
       <!-- Mini logo TriAxis salva em assets/mini-logo.png -->
-      <img class="brand-logo" src="assets/mini-logo.png" alt="Mini logo padrão TriAxis" loading="eager">
+      <img class="brand-logo" src="assets/mini-logo.png" alt="Mini logo padrão TriAxis" width="1254" height="1254" loading="eager" decoding="async">
       <div class="brand-text">
         <span class="brand-name">TRIAXIS</span>
         <span class="brand-sub">CYBERSHAPE</span>
@@ -58,56 +72,69 @@
         <input id="sidebarSearchInput" type="text" placeholder="#XXXXX / NOME" autocomplete="off" spellcheck="false">
         <button id="btnSidebarSearch" type="button" aria-label="Buscar agente">⌕</button>
       </div>
-      <div id="sidebarSearchStatus" class="sidebar-search-status">NODE READY</div>
+      <div id="sidebarSearchStatus" class="sidebar-search-status">SISTEMA PRONTO</div>
     </div>
 
     <nav class="sidebar-nav" id="sidebarNav">
-      <button class="nav-item active" data-view="home" type="button">
-        <span class="nav-icon">⌂</span>
+      <button class="nav-item active" data-view="home" type="button" aria-current="page">
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-home"></use></svg>
         <span class="nav-label">HOME</span>
       </button>
       <button class="nav-item" data-view="profile" type="button">
-        <span class="nav-icon">◉</span>
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-profile"></use></svg>
         <span class="nav-label">MEU PERFIL</span>
       </button>
-      <button class="nav-item" data-view="bank" type="button">
-        <span class="nav-icon">▤</span>
+      <button class="nav-item nav-item--secondary" data-view="bank" type="button">
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-agents"></use></svg>
         <span class="nav-label">BANCO DE AGENTES</span>
       </button>
-      <button class="nav-item" data-view="search" type="button">
-        <span class="nav-icon">⌕</span>
+      <button class="nav-item nav-item--secondary" data-view="search" type="button">
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
         <span class="nav-label">BUSCAR AGENTE</span>
       </button>
       <button class="nav-item" data-view="physical" type="button">
-        <span class="nav-icon">▣</span>
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-id"></use></svg>
         <span class="nav-label">ID FÍSICO</span>
       </button>
       <button class="nav-item" data-view="catalog" type="button">
-        <span class="nav-icon">◫</span>
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-catalog"></use></svg>
         <span class="nav-label">CATÁLOGO</span>
       </button>
-      <button class="nav-item" data-view="production" type="button">
-        <span class="nav-icon">▦</span>
+      <button class="nav-item nav-item--secondary" data-view="production" type="button">
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-production"></use></svg>
         <span class="nav-label">PRODUÇÃO</span>
       </button>
 
-      <button class="nav-item" data-view="quote" type="button">
-        <span class="nav-icon">▧</span>
+      <button class="nav-item nav-item--secondary" data-view="quote" type="button">
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-quote"></use></svg>
         <span class="nav-label">ORÇAMENTO</span>
       </button>
-      <button class="nav-item" data-view="verify" type="button">
-        <span class="nav-icon">◎</span>
+      <button class="nav-item nav-item--secondary" data-view="verify" type="button">
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-verify"></use></svg>
         <span class="nav-label">VERIFICAR QR</span>
       </button>
-      <button class="nav-item" data-view="lab" type="button">
-        <span class="nav-icon">⌬</span>
+      <button class="nav-item nav-item--secondary" data-view="lab" type="button">
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-lab"></use></svg>
         <span class="nav-label">LAB TRIAXIS</span>
       </button>
-      <button class="nav-item" data-view="settings" type="button">
-        <span class="nav-icon">⚙</span>
+      <button class="nav-item nav-item--secondary" data-view="settings" type="button">
+        <svg class="nav-icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
         <span class="nav-label">CONFIGURAÇÕES</span>
       </button>
     </nav>
+
+    <details class="mobile-nav-more">
+      <summary>MAIS <span aria-hidden="true">+</span></summary>
+      <div class="mobile-nav-more__menu">
+        <button class="nav-item" data-view="search" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-search"></use></svg><span class="nav-label">BUSCAR AGENTE</span></button>
+        <button class="nav-item" data-view="quote" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-quote"></use></svg><span class="nav-label">ORÇAMENTO</span></button>
+        <button class="nav-item" data-view="verify" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-verify"></use></svg><span class="nav-label">VERIFICAR QR</span></button>
+        <button class="nav-item" data-view="lab" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-lab"></use></svg><span class="nav-label">LAB TRIAXIS</span></button>
+        <button class="nav-item" data-view="bank" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-agents"></use></svg><span class="nav-label">BANCO DE AGENTES</span></button>
+        <button class="nav-item" data-view="production" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-production"></use></svg><span class="nav-label">PRODUÇÃO</span></button>
+        <button class="nav-item" data-view="settings" type="button"><svg class="nav-icon" aria-hidden="true"><use href="#icon-settings"></use></svg><span class="nav-label">CONFIGURAÇÕES</span></button>
+      </div>
+    </details>
 
     <div class="sidebar-footer">
       <div class="sys-status">
@@ -133,6 +160,20 @@
        PAINEL PRINCIPAL
   ══════════════════════════════════════════════════════════ -->
   <main class="main-panel">
+    <section id="paymentReturnPanel" class="payment-return-panel hud-frame" aria-live="polite" aria-atomic="true" hidden>
+      <span class="hud-corner tl"></span><span class="hud-corner br"></span>
+      <div class="payment-return-panel__status" aria-hidden="true"></div>
+      <div class="payment-return-panel__copy">
+        <p class="eyebrow">// STATUS DO PAGAMENTO</p>
+        <h2 id="paymentReturnTitle">RETORNO RECEBIDO</h2>
+        <p id="paymentReturnMessage">Estamos consultando o provedor antes de atualizar seu pedido.</p>
+        <small id="paymentReturnMeta"></small>
+      </div>
+      <div class="payment-return-panel__actions">
+        <button id="btnPaymentReturnProfile" class="btn btn-primary btn-sm" type="button">VER MEUS PEDIDOS</button>
+        <button id="btnPaymentReturnDismiss" class="btn btn-outline btn-sm" type="button">DISPENSAR AVISO</button>
+      </div>
+    </section>
 
     <!-- ──────────────────────────────────────────────────────
          VIEW: HOME / TRIAXIS NEXUS
@@ -143,30 +184,30 @@
         <div class="nexus-home-bg" aria-hidden="true"></div>
 
         <div class="nexus-home-content">
-          <p class="nexus-kicker">// TRIAXIS INTERNAL SYSTEM</p>
+          <p class="nexus-kicker">// SISTEMA INTERNO TRIAXIS</p>
           <div class="nexus-logo-home" aria-label="TriAxiS Nexus">
-            <img src="assets/triaxis-nexus-home-logo.png" alt="TriAxiS Nexus" class="nexus-logo-home-img" loading="eager">
+            <img src="assets/triaxis-nexus-home-logo.webp" alt="TriAxiS Nexus" class="nexus-logo-home-img" width="1536" height="1024" loading="eager" decoding="async" fetchpriority="high">
           </div>
           <p class="nexus-brand-slogan">Ideias digitais. Forma física.</p>
-          <p class="nexus-subtitle">Agent Registry · Product Catalog · Fabrication Queue</p>
+          <p class="nexus-subtitle">Registro de agentes · Catálogo de produtos · Fila de produção</p>
 
           <div class="nexus-quick-actions">
             <button class="btn btn-primary" data-home-go="catalog" type="button">
-              <span class="btn-icon">◫</span> ACESSAR PRODUTOS
+              <svg class="btn-icon" aria-hidden="true"><use href="#icon-catalog"></use></svg> ACESSAR PRODUTOS
             </button>
             <button class="btn btn-outline" data-home-go="physical" type="button">
-              <span class="btn-icon">▣</span> SOLICITAR ID FÍSICO
+              <svg class="btn-icon" aria-hidden="true"><use href="#icon-id"></use></svg> SOLICITAR ID FÍSICO
             </button>
             <button class="btn btn-outline" data-home-go="quote" type="button">
-              <span class="btn-icon">▧</span> ORÇAMENTO RÁPIDO
+              <svg class="btn-icon" aria-hidden="true"><use href="#icon-quote"></use></svg> ORÇAMENTO RÁPIDO
             </button>
           </div>
         </div>
 
         <div class="nexus-home-footer" aria-hidden="true">
-          <span>CYBERSHAPE NODE ONLINE</span>
+          <span>SISTEMA TRIAXIS ONLINE</span>
           <span>IDEIAS DIGITAIS. FORMA FÍSICA.</span>
-          <span>TRX-NXS // READY</span>
+          <span>TRX-NXS // PRONTO</span>
         </div>
       </div>
     </section>
@@ -549,7 +590,7 @@
           </div>
           <button id="btnRequestPhysicalFromView" class="btn btn-primary btn-block" type="button">SOLICITAR ID FÍSICO</button>
           <button id="btnDownloadPhysicalPreview" class="btn btn-outline btn-block" type="button">BAIXAR PRÉVIA PNG</button>
-          <div id="physicalViewStatus" class="sidebar-search-status">AWAITING AGENT</div>
+          <div id="physicalViewStatus" class="sidebar-search-status">AGUARDANDO AGENTE</div>
         </div>
 
         <div class="physical-preview-panel hud-frame">
@@ -618,7 +659,7 @@
           </div>
         </div>
         <div class="catalog-featured-art">
-          <img src="assets/vector-sigil-front-hero.png" alt="Vector Sigil TriAxis">
+          <img src="assets/vector-sigil-front-hero.webp" alt="Vector Sigil TriAxis" width="1122" height="1402" loading="lazy" decoding="async">
           <span>ACCESS TAG · QR READY · LAB NODE</span>
         </div>
       </div>
@@ -1000,7 +1041,7 @@
      MODAL: ADICIONAR A PERFIL
 ════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="modalAddProfile" aria-hidden="true">
-  <div class="modal hud-frame" role="dialog" aria-labelledby="modalAddTitle">
+  <div class="modal hud-frame" role="dialog" aria-modal="true" aria-labelledby="modalAddTitle" tabindex="-1">
     <span class="hud-corner tl"></span>
     <span class="hud-corner tr"></span>
     <span class="hud-corner bl"></span>
@@ -1093,7 +1134,7 @@
      MODAL: ID DIGITAL (credencial)
 ════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="modalIdCard" aria-hidden="true">
-  <div class="modal id-card-modal" role="dialog" aria-labelledby="idCardTitle">
+  <div class="modal id-card-modal" role="dialog" aria-modal="true" aria-labelledby="idCardTitle" tabindex="-1">
 
     <button class="modal-close modal-close--light" type="button" data-close-modal="modalIdCard" aria-label="Fechar">✕</button>
 
@@ -1107,7 +1148,7 @@
 
         <div class="id-card-face id-card-front">
           <div class="id-card-header">
-            <img class="id-card-logo" src="assets/mini-logo.png" alt="Mini logo padrão TriAxis" loading="eager">
+            <img class="id-card-logo" src="assets/mini-logo.png" alt="Mini logo padrão TriAxis" width="1254" height="1254" loading="lazy" decoding="async">
             <div>
               <div class="id-card-brand" id="idCardTitle">TRIAXIS CYBERSHAPE</div>
               <div class="id-card-subbrand">身分証明書 // CREDENCIAL DIGITAL</div>
@@ -1227,7 +1268,7 @@
      MODAL: AGENTE EXPANDIDO NO BANCO
 ════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="modalBankAgent" aria-hidden="true">
-  <div class="modal bank-agent-modal hud-frame" role="dialog" aria-labelledby="bankModalName">
+  <div class="modal bank-agent-modal hud-frame" role="dialog" aria-modal="true" aria-labelledby="bankModalName" tabindex="-1">
     <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
     <button class="modal-close" type="button" data-close-modal="modalBankAgent" aria-label="Fechar">✕</button>
 
@@ -1267,7 +1308,7 @@
      MODAL: DETALHES DO PRODUTO / CATÁLOGO V2
 ════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="modalCatalogDetail" aria-hidden="true">
-  <div class="modal catalog-detail-modal hud-frame" role="dialog" aria-labelledby="catalogDetailTitle">
+  <div class="modal catalog-detail-modal hud-frame" role="dialog" aria-modal="true" aria-labelledby="catalogDetailTitle" tabindex="-1">
     <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
     <button class="modal-close" type="button" data-close-modal="modalCatalogDetail" aria-label="Fechar">✕</button>
     <div id="catalogDetailContent"></div>
@@ -1278,7 +1319,7 @@
      MODAL: CONFIGURADOR DE PRODUTO / CATÁLOGO V2
 ════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="modalCatalogConfig" aria-hidden="true">
-  <div class="modal catalog-config-modal hud-frame" role="dialog" aria-labelledby="catalogConfigTitle">
+  <div class="modal catalog-config-modal hud-frame" role="dialog" aria-modal="true" aria-labelledby="catalogConfigTitle" tabindex="-1">
     <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
     <button class="modal-close" type="button" data-close-modal="modalCatalogConfig" aria-label="Fechar">✕</button>
     <div class="modal-header">
@@ -1293,7 +1334,7 @@
      MODAL: EDITOR ADMINISTRATIVO DO CATÁLOGO
 ════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="modalCatalogAdminEditor" aria-hidden="true">
-  <div class="modal catalog-admin-editor-modal hud-frame" role="dialog" aria-labelledby="catalogAdminEditorTitle">
+  <div class="modal catalog-admin-editor-modal hud-frame" role="dialog" aria-modal="true" aria-labelledby="catalogAdminEditorTitle" tabindex="-1">
     <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
     <button class="modal-close" type="button" data-close-modal="modalCatalogAdminEditor" aria-label="Fechar">✕</button>
     <div class="modal-header catalog-admin-editor-head">
@@ -1308,7 +1349,7 @@
      MODAL: SOLICITAÇÃO DE ID FÍSICO
 ════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="modalPhysicalId" aria-hidden="true">
-  <div class="modal physical-request-modal hud-frame" role="dialog" aria-labelledby="physicalModalTitle">
+  <div class="modal physical-request-modal hud-frame" role="dialog" aria-modal="true" aria-labelledby="physicalModalTitle" tabindex="-1">
     <span class="hud-corner tl"></span><span class="hud-corner tr"></span><span class="hud-corner bl"></span><span class="hud-corner br"></span>
     <button class="modal-close" type="button" data-close-modal="modalPhysicalId" aria-label="Fechar">✕</button>
     <div class="modal-header">
@@ -1378,7 +1419,7 @@
 <script src="supabase-auth.js?v=20260725-protocol-v1-1"></script>
 <script src="supabase-catalog.js?v=20260725-protocol-v1-1"></script>
 <script src="supabase-orders.js?v=20260725-protocol-v1-1"></script>
-<script src="supabase-payments.js?v=20260728-payment-v2"></script>
-<script src="script.js?v=20260728-payment-v1"></script>
+<script src="supabase-payments.js?v=20260729-usability-v1"></script>
+<script src="script.js?v=20260729-usability-v1"></script>
 </body>
 </html>

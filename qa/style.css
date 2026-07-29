@@ -20,9 +20,13 @@
   --c-red-dimmer:  rgba(232,0,28,.06);
 
   --c-white:       #FFFFFF;   /* glitch white — texto principal */
-  --c-gray:        #888888;   /* static gray — texto secundário */
-  --c-gray-dim:    #555555;
-  --c-gray-faint:  #333333;
+  --c-gray:        #B8B8B8;   /* texto secundário com contraste AA */
+  --c-gray-dim:    #929292;
+  --c-gray-faint:  #7A7A7A;
+  --text-muted:    var(--c-gray);
+  --surface-panel: var(--c-deep);
+  --border-accent: var(--c-border-red);
+  --font-caption:  .8rem;
 
   --f-display:  'Orbitron', sans-serif;
   --f-body:     'Oxanium', sans-serif;
@@ -3358,8 +3362,8 @@ body.sidebar-hidden .main-panel{
 .nexus-title,
 .nexus-title::before,
 .nexus-title::after{
-  font-family: var(--f-nexus) !important;
-  font-weight: 400 !important;
+  font-family: var(--f-nexus);
+  font-weight: 400;
 }
 .nexus-title{
   background: linear-gradient(180deg, #ffffff 0%, #d9d9d9 48%, #7d7d7d 100%);
@@ -3396,21 +3400,21 @@ body.sidebar-hidden .main-panel{
 
 /* ═══════════════════════════════════════════════════════════════════════
    HOME LOGO POR IMAGEM — versão funcional e estável
-   Usa assets/triaxis-nexus-home-logo.png como logo principal da home.
+   Usa assets/triaxis-nexus-home-logo.webp como logo principal da home.
 ═══════════════════════════════════════════════════════════════════════ */
 .home-view.active{
-  display:flex !important;
+  display:flex;
   align-items:center;
   justify-content:center;
 }
 .nexus-home-shell{
-  width:min(1180px,100%) !important;
+  width:min(1180px,100%);
   min-height:min(720px,calc(100vh - 120px));
   background:
     radial-gradient(circle at 50% 35%, rgba(232,0,28,.20), transparent 30%),
     radial-gradient(circle at 50% 72%, rgba(255,255,255,.035), transparent 42%),
     linear-gradient(180deg, rgba(255,255,255,.02), transparent),
-    #020202 !important;
+    #020202;
 }
 .nexus-home-content{
   width:min(1120px,100%);
@@ -3460,7 +3464,7 @@ body:not(.glitch-off) .nexus-logo-home::after{
   content:'';
   position:absolute;
   inset:0;
-  background:url("assets/triaxis-nexus-home-logo.png") center/contain no-repeat;
+  background:url("assets/triaxis-nexus-home-logo.webp") center/contain no-repeat;
   opacity:.16;
   transform:translate(4px,0);
   filter:brightness(0) saturate(1) invert(15%) sepia(100%) saturate(7458%) hue-rotate(345deg) brightness(106%) contrast(113%);
@@ -3839,8 +3843,8 @@ body:not(.glitch-off) .nexus-home-content{
 }
 
 .nexus-kicker{
-  margin-bottom:clamp(4px, .7vw, 10px) !important;
-  font-size:10px !important;
+  margin-bottom:clamp(4px, .7vw, 10px);
+  font-size:12px;
 }
 
 .nexus-logo-home{
@@ -5841,4 +5845,391 @@ body[data-mode="client"] .catalog-admin-only{ display:none!important; }
 .sidebar {
   top: 32px;
   height: calc(100vh - 32px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   QA USABILITY LAYER
+   Consolida legibilidade, acessibilidade, pagamento e navegação móvel.
+   Mantém a direção de arte existente sem criar novas variantes de componente.
+═══════════════════════════════════════════════════════════════════════ */
+.icon-sprite{
+  position:absolute;
+  width:0;
+  height:0;
+  overflow:hidden;
+}
+.nav-icon{
+  width:18px;
+  height:18px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.btn-icon{
+  width:16px;
+  height:16px;
+  flex:0 0 auto;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.mobile-nav-more{ display:none; }
+
+body{
+  line-height:1.5;
+}
+.sidebar .brand-sub,
+.sidebar small,
+.sidebar label,
+.sidebar .sidebar-version,
+.nav-label,
+.view .eyebrow,
+.view label,
+.view small,
+.view .btn,
+.view .badge,
+.physical-product-summary,
+.physical-custom-mini h4,
+.physical-custom-mini .toggle-row span,
+.physical-tech-grid span,
+.section-divider span,
+.physical-request-main span,
+.physical-request-specs b,
+.physical-request-specs span,
+.login-access-text,
+.catalog-featured-meta b,
+.catalog-featured-art span,
+.catalog-access-status,
+.catalog-access-agent-mini,
+.catalog-chip span,
+.catalog-chip b,
+.catalog-result-count,
+.catalog-feature-ribbon,
+.catalog-card-requirement,
+.catalog-line,
+.catalog-status,
+.catalog-card-data b,
+.catalog-specs span,
+.lab-gallery-card > div > span{
+  font-size:12px;
+}
+.view-sub,
+.catalog-featured p,
+.profile-order-payment small,
+.payment-return-panel p{
+  color:var(--c-gray);
+}
+.eyebrow,
+.catalog-line,
+.catalog-feature-ribbon,
+.section-divider span,
+.sidebar-search-status.found,
+.nav-item.active,
+.btn-outline{
+  color:var(--c-red-bright);
+}
+.eyebrow,
+.nav-label,
+.form-field label,
+.form-field small,
+.catalog-card small,
+.catalog-step small,
+.catalog-config-review,
+.profile-order-card small,
+.profile-order-payment small,
+.payment-return-panel small,
+.sidebar-search-status,
+.sidebar-quick-search label{
+  font-size:var(--font-caption);
+  line-height:1.45;
+}
+.btn,
+button,
+input,
+select,
+textarea{
+  min-height:40px;
+}
+select,
+textarea{
+  font-family:inherit;
+  color:inherit;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible{
+  outline:2px solid var(--c-red-bright);
+  outline-offset:3px;
+  box-shadow:0 0 0 4px rgba(232,0,28,.18);
+}
+
+body.modal-open{ overflow:hidden; }
+.modal-overlay[aria-hidden="true"]{ visibility:hidden; }
+.modal-overlay.open{ visibility:visible; }
+.modal[role="dialog"]{
+  max-height:min(90vh,900px);
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+.modal[role="dialog"]:focus{ outline:none; }
+.modal-close{
+  min-width:44px;
+  min-height:44px;
+}
+
+.payment-return-panel{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:18px;
+  margin:0 0 28px;
+  padding:18px 20px;
+  border:1px solid var(--border-accent);
+  background:
+    linear-gradient(110deg,rgba(232,0,28,.11),transparent 46%),
+    var(--surface-panel);
+}
+.payment-return-panel[hidden]{ display:none; }
+.payment-return-panel__status{
+  width:12px;
+  height:12px;
+  border:2px solid var(--c-red);
+  transform:rotate(45deg);
+  box-shadow:0 0 14px rgba(232,0,28,.45);
+}
+.payment-return-panel[data-payment-status="success"] .payment-return-panel__status{
+  border-color:#5ee38d;
+  background:#173f27;
+  box-shadow:0 0 14px rgba(94,227,141,.4);
+}
+.payment-return-panel[data-payment-status="pending"] .payment-return-panel__status{
+  border-color:#ffd34d;
+  background:#4a3b0d;
+  box-shadow:0 0 14px rgba(255,211,77,.38);
+}
+.payment-return-panel__copy .eyebrow{ margin-bottom:3px; }
+.payment-return-panel__copy h2{
+  font-family:var(--f-display);
+  font-size:clamp(17px,2vw,23px);
+  letter-spacing:1px;
+}
+.payment-return-panel__copy p{ margin-top:5px; }
+.payment-return-panel__copy small{
+  display:block;
+  margin-top:7px;
+  color:var(--c-gray-dim);
+  font-family:var(--f-mono);
+}
+.payment-return-panel__actions{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-width:190px;
+}
+.payment-return-panel .btn,
+.nexus-kicker,
+.nexus-home-footer span{
+  font-size:12px;
+}
+.profile-order-payment{
+  border-top:1px solid rgba(255,255,255,.08);
+  padding-top:14px;
+}
+.profile-order-payment small{
+  max-width:520px;
+}
+
+@media (max-width:620px){
+  body{ font-size:16px; }
+  .app-shell{
+    margin-top:32px;
+    padding-bottom:74px;
+  }
+  .main-panel{
+    padding:24px 16px 48px;
+  }
+  .sidebar{
+    position:fixed;
+    inset:auto 0 0;
+    z-index:8800;
+    height:74px;
+    padding:6px 8px max(6px,env(safe-area-inset-bottom));
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 62px;
+    gap:4px;
+    overflow:visible;
+    border:0;
+    border-top:1px solid var(--c-border-red);
+    background:rgba(8,8,8,.97);
+    backdrop-filter:blur(12px);
+  }
+  .sidebar-brand,
+  .sidebar-tagline,
+  .sidebar-quick-search,
+  .sidebar-footer,
+  .sidebar-toggle,
+  .sidebar-reveal,
+  .sidebar-nav > .nav-item--secondary{
+    display:none;
+  }
+  .sidebar-nav{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:2px;
+    overflow:visible;
+  }
+  .sidebar-nav > .nav-item{
+    min-width:0;
+    min-height:58px;
+    padding:5px 2px;
+    border:0;
+    border-top:2px solid transparent;
+  }
+  .sidebar-nav > .nav-item.active{
+    border-top-color:var(--c-red);
+    border-bottom-color:transparent;
+  }
+  .nav-label{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    font-size:12px;
+    letter-spacing:.5px;
+  }
+  .mobile-nav-more{
+    display:block;
+    position:relative;
+    align-self:stretch;
+  }
+  .mobile-nav-more summary{
+    min-height:58px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:2px;
+    color:var(--c-gray);
+    font-family:var(--f-mono);
+    font-size:12px;
+    letter-spacing:.6px;
+    list-style:none;
+    cursor:pointer;
+  }
+  .mobile-nav-more summary::-webkit-details-marker{ display:none; }
+  .mobile-nav-more summary span{
+    color:var(--c-red);
+    font-size:18px;
+    line-height:1;
+  }
+  .mobile-nav-more[open] summary span{ transform:rotate(45deg); }
+  .mobile-nav-more__menu{
+    position:absolute;
+    right:0;
+    bottom:66px;
+    width:min(328px,calc(100vw - 16px));
+    max-height:min(65vh,420px);
+    overflow:auto;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:4px;
+    padding:10px;
+    border:1px solid var(--c-border-red);
+    background:#090909;
+    box-shadow:0 -20px 50px rgba(0,0,0,.72);
+  }
+  .mobile-nav-more__menu .nav-item{
+    min-height:48px;
+    padding:9px 10px;
+    flex-direction:row;
+    border:1px solid rgba(255,255,255,.07);
+  }
+  .mobile-nav-more__menu .nav-label{
+    font-size:12px;
+    text-align:left;
+    white-space:normal;
+  }
+  .payment-return-panel{
+    grid-template-columns:auto minmax(0,1fr);
+    gap:12px;
+    padding:16px;
+  }
+  .payment-return-panel__actions{
+    grid-column:1 / -1;
+    min-width:0;
+  }
+  .payment-return-panel__actions .btn{ width:100%; }
+  .profile-order-payment{
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .profile-order-payment .btn{ width:100%; }
+
+  #modalCatalogConfig{
+    padding:0;
+    align-items:stretch;
+  }
+  #modalCatalogConfig .catalog-config-modal{
+    width:100%;
+    max-width:none;
+    max-height:none;
+    height:100%;
+    margin:0;
+    padding:58px 16px 0;
+    border-left:0;
+    border-right:0;
+  }
+  #modalCatalogConfig .catalog-config-preview--sticky{
+    position:relative;
+    top:auto;
+    display:grid;
+    grid-template-columns:88px minmax(0,1fr);
+    gap:10px;
+    align-items:center;
+  }
+  #modalCatalogConfig .catalog-config-preview--sticky img{
+    max-height:92px;
+    padding:6px;
+  }
+  #modalCatalogConfig .catalog-config-preview-tag{ margin:0; }
+  #modalCatalogConfig .catalog-config-summary--fixed{
+    grid-column:1 / -1;
+    margin:0;
+  }
+  #modalCatalogConfig .catalog-config-form--steps .form-row{
+    grid-template-columns:1fr;
+  }
+  #modalCatalogConfig .form-actions{
+    position:sticky;
+    bottom:0;
+    z-index:5;
+    margin:8px -16px 0;
+    padding:12px 16px max(12px,env(safe-area-inset-bottom));
+    background:rgba(5,5,5,.98);
+    border-top:1px solid var(--c-border-red);
+  }
+  #modalCatalogConfig .form-actions .btn{ min-height:48px; }
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{ scroll-behavior:auto; }
+  *,
+  *::before,
+  *::after{
+    animation-duration:.01ms;
+    animation-iteration-count:1;
+    transition-duration:.01ms;
+    scroll-behavior:auto;
+  }
+  .scanline-overlay,
+  .noise-overlay{
+    display:none;
+  }
 }

@@ -48,6 +48,15 @@
   let physicalOrderIntentId = null;
   let catalogOrderIntentId = null;
   let catalogSignedRefreshTimer = null;
+  const modalReturnFocus = new Map();
+  const MODAL_FOCUSABLE_SELECTOR = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled]):not([type="hidden"])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+  ].join(',');
 
   const DEFAULT_SETTINGS = { scanlines: true, glitch: true, noise: true, theme: 'classic', mode: 'client' };
 
@@ -77,7 +86,7 @@
       id: 'vector_sigil',
       name: 'Vector Sigil',
       line: 'ACCESS TAG',
-      img: 'assets/vector-sigil-front-hero.png',
+      img: 'assets/vector-sigil-front-hero.webp',
       basePrice: 19.90,
       productionTime: '1–2 dias',
       description: 'Chaveiro ID físico com QR, serial e estética de acesso restrito TriAxis.',
@@ -87,7 +96,7 @@
       id: 'omega_pass',
       name: 'Omega Pass',
       line: 'PREMIUM ACCESS',
-      img: 'assets/omega-pass.png',
+      img: 'assets/omega-pass.webp',
       basePrice: 34.90,
       productionTime: '2–3 dias',
       description: 'Passe premium com visual de credencial secreta e acabamento de coleção.',
@@ -107,7 +116,7 @@
       id: 'mascot_badge',
       name: 'Mascot Badge',
       line: 'CHARACTER UNIT',
-      img: 'assets/mascot-badge.png',
+      img: 'assets/mascot-badge.webp',
       basePrice: 24.90,
       productionTime: '2 dias',
       description: 'Badge colecionável com o mascote TriAxis em estética cyberpunk 90s.',
@@ -117,7 +126,7 @@
       id: 'agent_card',
       name: 'Agent ID Card',
       line: 'DIGITAL CREDENTIAL',
-      img: 'assets/agent-card-product.png',
+      img: 'assets/agent-card-product.webp',
       basePrice: 29.90,
       productionTime: '2 dias',
       description: 'Credencial física inspirada em cartões de acesso internos e tags de agente.',
@@ -127,7 +136,7 @@
       id: 'cybershape_unit',
       name: 'CyberShape Unit',
       line: 'CUSTOM PRODUCT',
-      img: 'assets/cybershape-unit.png',
+      img: 'assets/cybershape-unit.webp',
       basePrice: 39.90,
       productionTime: 'sob consulta',
       description: 'Unidade customizada para peças físicas, miniaturas e protótipos TriAxis.',
@@ -147,11 +156,11 @@
   const CATALOG_META = {
     vector_sigil: {
       category: 'ids', categoryLabel: 'IDs e Tags', type: 'ID FÍSICO', availability: 'available', availabilityLabel: 'Disponível', customization: 'Nome + QR + Tag', size: '70 × 32 × 4 mm',
-      materials: ['PLA preto fosco', 'Resina premium', 'Detalhe vermelho'], uses: ['Identificação de agente', 'chaveiro de acesso', 'brinde premium'], gallery: ['assets/vector-sigil-front-hero.png', 'assets/vector-sigil-back.png', 'assets/vector-sigil-vistas-panel.png']
+      materials: ['PLA preto fosco', 'Resina premium', 'Detalhe vermelho'], uses: ['Identificação de agente', 'chaveiro de acesso', 'brinde premium'], gallery: ['assets/vector-sigil-front-hero.webp', 'assets/vector-sigil-back.png', 'assets/vector-sigil-vistas-panel.webp']
     },
     omega_pass: {
       category: 'ids', categoryLabel: 'IDs e Tags', type: 'PREMIUM ACCESS', availability: 'limited', availabilityLabel: 'Edição limitada', customization: 'Serial + nome + acabamento premium', size: 'Formato passe / tag premium',
-      materials: ['PLA técnico', 'Resina', 'Pintura manual'], uses: ['Passe premium', 'item colecionável', 'credencial secreta'], gallery: ['assets/omega-pass.png']
+      materials: ['PLA técnico', 'Resina', 'Pintura manual'], uses: ['Passe premium', 'item colecionável', 'credencial secreta'], gallery: ['assets/omega-pass.webp']
     },
     mini_logo_tag: {
       category: 'ids', categoryLabel: 'IDs e Tags', type: 'BRAND KEYCHAIN', availability: 'available', availabilityLabel: 'Disponível', customization: 'Cores + argola + embalagem', size: 'Compacto',
@@ -159,15 +168,15 @@
     },
     mascot_badge: {
       category: 'collectibles', categoryLabel: 'Colecionáveis', type: 'CHARACTER UNIT', availability: 'custom_order', availabilityLabel: 'Sob encomenda', customization: 'Cor + base + acabamento', size: 'Sob medida',
-      materials: ['PLA', 'Resina', 'Pintura manual'], uses: ['Badge colecionável', 'mascote', 'display'], gallery: ['assets/mascot-badge.png']
+      materials: ['PLA', 'Resina', 'Pintura manual'], uses: ['Badge colecionável', 'mascote', 'display'], gallery: ['assets/mascot-badge.webp']
     },
     agent_card: {
       category: 'ids', categoryLabel: 'IDs e Tags', type: 'DIGITAL CREDENTIAL', availability: 'custom_order', availabilityLabel: 'Sob encomenda', customization: 'Dados do agente + QR + verso', size: 'Cartão/placa',
-      materials: ['PLA fino', 'Acrílico opcional', 'Adesivo técnico'], uses: ['Credencial', 'verificação', 'card de agente'], gallery: ['assets/agent-card-product.png']
+      materials: ['PLA fino', 'Acrílico opcional', 'Adesivo técnico'], uses: ['Credencial', 'verificação', 'card de agente'], gallery: ['assets/agent-card-product.webp']
     },
     cybershape_unit: {
       category: 'services', categoryLabel: 'Serviços', type: 'CUSTOM PRODUCT', availability: 'prototype', availabilityLabel: 'Protótipo', customization: 'Briefing completo', size: 'Sob consulta',
-      materials: ['PLA', 'Resina', 'Epóxi opcional', 'Pintura manual'], uses: ['Protótipo', 'miniatura', 'peça customizada'], gallery: ['assets/cybershape-unit.png']
+      materials: ['PLA', 'Resina', 'Epóxi opcional', 'Pintura manual'], uses: ['Protótipo', 'miniatura', 'peça customizada'], gallery: ['assets/cybershape-unit.webp']
     }
   };
 
@@ -421,11 +430,17 @@
       viewName = 'home';
     }
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach((n) => n.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach((n) => {
+      n.classList.remove('active');
+      n.removeAttribute('aria-current');
+    });
     const view = document.getElementById('view-' + viewName);
-    const nav = document.querySelector(`.nav-item[data-view="${viewName}"]`);
     if (view) view.classList.add('active');
-    if (nav) nav.classList.add('active');
+    document.querySelectorAll(`.nav-item[data-view="${viewName}"]`).forEach((item) => {
+      item.classList.add('active');
+      item.setAttribute('aria-current', 'page');
+    });
+    document.querySelectorAll('.mobile-nav-more[open]').forEach((menu) => menu.removeAttribute('open'));
     if (viewName === 'bank') renderBank();
     if (viewName === 'physical') renderPhysicalIdView();
     if (viewName === 'catalog') renderCatalog();
@@ -436,14 +451,34 @@
     if (viewName === 'settings') renderSettings();
   }
 
-  function openModal(id) {
-    const modal = document.getElementById(id);
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
+  function syncModalDocumentState() {
+    const hasOpenModal = Boolean(document.querySelector('.modal-overlay.open'));
+    document.body.classList.toggle('modal-open', hasOpenModal);
+    document.querySelector('.app-shell')?.toggleAttribute('inert', hasOpenModal);
   }
 
-  function closeModal(id) {
+  function getModalFocusableElements(overlay) {
+    return Array.from(overlay.querySelectorAll(MODAL_FOCUSABLE_SELECTOR))
+      .filter((element) => !element.hidden && element.getClientRects().length > 0);
+  }
+
+  function openModal(id) {
     const modal = document.getElementById(id);
+    if (!modal) return;
+    modalReturnFocus.set(id, document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    syncModalDocumentState();
+    window.requestAnimationFrame(() => {
+      const dialog = modal.querySelector('[role="dialog"]');
+      const preferred = modal.querySelector('[autofocus]') || getModalFocusableElements(modal)[0] || dialog;
+      preferred?.focus({ preventScroll: true });
+    });
+  }
+
+  function closeModal(id, { restoreFocus = true } = {}) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
     if (id === 'modalPhysicalId' && physicalOrderIntentId) {
       void window.TriAxisOrders?.cancelIntent?.(physicalOrderIntentId)?.catch((error) => console.error('Falha ao reconciliar intenção física:', error));
       physicalOrderIntentId = null;
@@ -454,13 +489,46 @@
     }
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
+    syncModalDocumentState();
+    const returnTarget = modalReturnFocus.get(id);
+    modalReturnFocus.delete(id);
+    if (restoreFocus && returnTarget?.isConnected && !document.querySelector('.modal-overlay.open')) {
+      returnTarget.focus({ preventScroll: true });
+    }
   }
 
   function closeAllModals() {
-    document.querySelectorAll('.modal-overlay.open').forEach((m) => {
-      m.classList.remove('open');
-      m.setAttribute('aria-hidden', 'true');
-    });
+    const openModals = Array.from(document.querySelectorAll('.modal-overlay.open'));
+    const returnTarget = openModals.length ? modalReturnFocus.get(openModals[0].id) : null;
+    openModals.forEach((modal) => closeModal(modal.id, { restoreFocus: false }));
+    if (returnTarget?.isConnected) returnTarget.focus({ preventScroll: true });
+  }
+
+  function handleModalKeydown(event) {
+    const openModals = Array.from(document.querySelectorAll('.modal-overlay.open'));
+    const activeModal = openModals[openModals.length - 1];
+    if (!activeModal) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeModal(activeModal.id);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = getModalFocusableElements(activeModal);
+    if (!focusable.length) {
+      event.preventDefault();
+      activeModal.querySelector('[role="dialog"]')?.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   /* ── Cadastro ─────────────────────────────────────────────────────── */
@@ -564,7 +632,7 @@
     const input = document.getElementById('sidebarSearchInput');
     const status = document.getElementById('sidebarSearchStatus');
     const q = input.value.trim();
-    if (!q) { status.textContent = 'NODE READY'; status.className = 'sidebar-search-status'; return; }
+    if (!q) { status.textContent = 'SISTEMA PRONTO'; status.className = 'sidebar-search-status'; return; }
     const matches = q.startsWith('#') || /^[a-z0-9]{5}$/i.test(q) ? [findAgentByTag(normalizeTagInput(q))].filter(Boolean) : findAgents(q);
     if (matches.length) {
       status.textContent = `AGENT FOUND · ${matches[0].tag}`;
@@ -997,9 +1065,9 @@
     const matches = findAgents(q);
     if (matches.length) {
       selectPhysicalAgent(matches[0].tag);
-      if (status) { status.textContent = `AGENT LOADED · ${matches[0].tag}`; status.className = 'sidebar-search-status found'; }
+      if (status) { status.textContent = `AGENTE CARREGADO · ${matches[0].tag}`; status.className = 'sidebar-search-status found'; }
     } else if (status) {
-      status.textContent = 'AGENT NOT FOUND'; status.className = 'sidebar-search-status denied';
+      status.textContent = 'AGENTE NÃO ENCONTRADO'; status.className = 'sidebar-search-status denied';
     }
   }
 
@@ -1015,7 +1083,7 @@
     const product = getCatalogProduct(currentPhysicalProduct);
     const productViews = getPhysicalProductViews(product);
     const variant = PHYSICAL_VARIANTS[currentPhysicalVariant] || PHYSICAL_VARIANTS.standard;
-    const heroImage = product.id === 'vector_sigil' ? 'assets/vector-sigil-front-hero.png' : product.img;
+    const heroImage = product.id === 'vector_sigil' ? 'assets/vector-sigil-front-hero.webp' : product.img;
     const cleanName = escapeHtml(agent.name || 'AGENTE TRIAXIS');
     const cleanRole = escapeHtml(agent.role || 'Agente TriAxis');
     const qrId = escapeHtml(agent.qrId || '—');
@@ -1035,7 +1103,7 @@
     const front = `
       <div class="real-id-view real-id-view--front">
         <div class="real-id-photo-frame real-id-photo-frame--front">
-          <img src="${escapeHtml(heroImage)}" alt="${escapeHtml(product.name)} TriAxis">
+          <img src="${escapeHtml(heroImage)}" alt="${escapeHtml(product.name)} TriAxis" loading="lazy" decoding="async">
           <span class="real-id-photo-glass" aria-hidden="true"></span>
         </div>
         ${dataPlate}
@@ -1044,7 +1112,7 @@
     const back = `
       <div class="real-id-view real-id-view--back">
         <div class="real-id-object-card">
-          <img class="real-id-object-img real-id-object-img--back" src="${escapeHtml(productViews.back)}" alt="Vista complementar de ${escapeHtml(product.name)}">
+          <img class="real-id-object-img real-id-object-img--back" src="${escapeHtml(productViews.back)}" alt="Vista complementar de ${escapeHtml(product.name)}" loading="lazy" decoding="async">
           <div class="real-id-live-qr" id="${targetId}Qr"></div>
         </div>
         <aside class="real-id-back-info">
@@ -1059,7 +1127,7 @@
     const sideView = `
       <div class="real-id-view real-id-view--side">
         <div class="real-id-object-card real-id-object-card--side">
-          <img class="real-id-object-img real-id-object-img--side" src="${escapeHtml(productViews.side)}" alt="Vista lateral de ${escapeHtml(product.name)}">
+          <img class="real-id-object-img real-id-object-img--side" src="${escapeHtml(productViews.side)}" alt="Vista lateral de ${escapeHtml(product.name)}" loading="lazy" decoding="async">
         </div>
         <aside class="real-id-back-info">
           <span>PRODUCT PROFILE</span>
@@ -1074,7 +1142,7 @@
       <div class="real-id-board">
         <div class="real-id-board__top"><span>VISTAS</span><i></i></div>
         <div class="real-id-board__main">
-          <img src="${escapeHtml(productViews.concept)}" alt="Prancha visual de ${escapeHtml(product.name)}">
+          <img src="${escapeHtml(productViews.concept)}" alt="Prancha visual de ${escapeHtml(product.name)}" loading="lazy" decoding="async">
           <div class="real-id-board__agent">
             <span>${escapeHtml(product.name)} · ${cleanTag}</span>
             <strong>${cleanName}</strong>
@@ -2283,7 +2351,7 @@
     const product = enrichCatalogProduct(getCatalogProduct(productId));
     const content = document.getElementById('catalogDetailContent');
     if (!content) return;
-    const gallery = product.gallery.map((src, index) => `<figure class="catalog-detail-thumb ${index === 0 ? 'active' : ''}"><img src="${escapeHtml(src)}" alt="${escapeHtml(product.name)}"></figure>`).join('');
+    const gallery = product.gallery.map((src, index) => `<figure class="catalog-detail-thumb ${index === 0 ? 'active' : ''}"><img src="${escapeHtml(src)}" alt="${escapeHtml(product.name)}" loading="lazy" decoding="async"></figure>`).join('');
     content.innerHTML = `
       <div class="catalog-detail-grid catalog-detail-grid--premium">
         <div class="catalog-detail-gallery catalog-detail-gallery--premium">${gallery}</div>
@@ -2325,7 +2393,7 @@
     content.innerHTML = `
       <div class="catalog-config-grid catalog-config-grid--stepped">
         <aside class="catalog-config-preview catalog-config-preview--sticky">
-          <img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}">
+          <img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}" decoding="async">
           <div class="catalog-config-preview-tag"><span>${escapeHtml(product.lineLabel)}</span><strong>${escapeHtml(product.name)}</strong></div>
           <div class="catalog-config-summary catalog-config-summary--fixed" id="catalogConfigSummary"></div>
         </aside>
@@ -2509,7 +2577,7 @@
     return Math.min(max, Math.max(min, number));
   }
 
-  function safeCatalogAsset(value, fallback = 'assets/cybershape-unit.png') {
+  function safeCatalogAsset(value, fallback = 'assets/cybershape-unit.webp') {
     const source = String(value || '').trim();
     if (!source || source.length > 2 * 1024 * 1024) return fallback;
     if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(source)) return source;
@@ -2927,7 +2995,7 @@
         </div>
       </div>
       <div class="catalog-featured-art">
-        <img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)} TriAxis" style="object-fit:${escapeHtml(product.imageFit)}">
+        <img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)} TriAxis" style="object-fit:${escapeHtml(product.imageFit)}" loading="lazy" decoding="async">
         <span>${escapeHtml(product.promoLabel || product.line)} · ${escapeHtml(product.availabilityLabel)} · TRIAXIS NODE</span>
       </div>`;
     container.querySelector('[data-catalog-detail]')?.addEventListener('click', () => openCatalogDetail(product.id));
@@ -2954,7 +3022,7 @@
         <span class="hud-corner tl"></span><span class="hud-corner br"></span>
         ${product.featured ? '<span class="catalog-feature-ribbon">DESTAQUE</span>' : ''}
         ${product.promoLabel ? `<span class="catalog-promo-label">${escapeHtml(product.promoLabel)}</span>` : ''}
-        <div class="catalog-card-img catalog-card-img-v2"><img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}" style="object-fit:${escapeHtml(product.imageFit)}"><span class="catalog-card-requirement">REQUER TAG AUTORIZADA</span></div>
+        <div class="catalog-card-img catalog-card-img-v2"><img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}" style="object-fit:${escapeHtml(product.imageFit)}" loading="lazy" decoding="async"><span class="catalog-card-requirement">REQUER TAG AUTORIZADA</span></div>
         <div class="catalog-card-body">
           <div class="catalog-card-topline"><span class="catalog-line">${escapeHtml(product.lineLabel)}</span><span class="catalog-status catalog-status--${escapeHtml(product.availability)}">${escapeHtml(product.availabilityLabel)}</span></div>
           <h3>${escapeHtml(product.name)}</h3>
@@ -3098,7 +3166,7 @@
       container.innerHTML = '<div class="catalog-admin-empty">NENHUM PRODUTO PUBLICADO</div>';
       return;
     }
-    container.innerHTML = `<img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}"><div><span>${escapeHtml(product.lineLabel)}</span><strong>${escapeHtml(product.name)}</strong><small>${product.showPrice ? formatCurrencyBRL(product.basePrice) : 'Sob consulta'} · ${escapeHtml(product.productionTime)}</small></div>`;
+    container.innerHTML = `<img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}" loading="lazy" decoding="async"><div><span>${escapeHtml(product.lineLabel)}</span><strong>${escapeHtml(product.name)}</strong><small>${product.showPrice ? formatCurrencyBRL(product.basePrice) : 'Sob consulta'} · ${escapeHtml(product.productionTime)}</small></div>`;
   }
 
   function renderCatalogAdminProductList() {
@@ -3112,7 +3180,7 @@
     list.innerHTML = products.map((product, index) => `
       <article class="catalog-admin-product ${product.hidden ? 'is-hidden' : ''} ${product.featured ? 'is-featured' : ''}" draggable="true" data-admin-product="${escapeHtml(product.id)}">
         <button class="catalog-admin-drag" type="button" title="Arraste para mudar a prioridade">⠿</button>
-        <div class="catalog-admin-thumb"><img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}" style="object-fit:${escapeHtml(product.imageFit)}"></div>
+        <div class="catalog-admin-thumb"><img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}" style="object-fit:${escapeHtml(product.imageFit)}" loading="lazy" decoding="async"></div>
         <div class="catalog-admin-product-copy">
           <div class="catalog-admin-product-title"><span>#${String(product.priority + 1).padStart(2, '0')}</span><h4>${escapeHtml(product.name)}</h4>${product.featured ? '<b>DESTAQUE</b>' : ''}${product.hidden ? '<b class="muted">OCULTO</b>' : ''}</div>
           <p>${escapeHtml(product.line)} · ${escapeHtml(product.categoryLabel)} · ${escapeHtml(product.availabilityLabel)}</p>
@@ -3265,7 +3333,7 @@
     }
     container.innerHTML = catalogAdminGalleryDraft.map((source, index) => `
       <figure class="catalog-editor-gallery-item">
-        <img src="${escapeHtml(source)}" alt="Imagem ${index + 1}">
+        <img src="${escapeHtml(source)}" alt="Imagem ${index + 1}" loading="lazy" decoding="async">
         <button type="button" data-gallery-main="${index}" title="Usar como capa">CAPA</button>
         <button type="button" data-gallery-remove="${index}" title="Remover">✕</button>
       </figure>`).join('');
@@ -3285,7 +3353,7 @@
     const input = document.getElementById('catalogEditorImagePath');
     if (input?.value.trim()) catalogAdminMainImageDraft = input.value.trim();
     const image = document.getElementById('catalogEditorImagePreview');
-    if (image) image.src = catalogAdminMainImageDraft || 'assets/cybershape-unit.png';
+    if (image) image.src = catalogAdminMainImageDraft || 'assets/cybershape-unit.webp';
   }
 
   function readCatalogImageFile(file, maxDimension = 1600, quality = 0.86) {
@@ -3360,7 +3428,7 @@
       id: `produto_${Date.now().toString(36)}`,
       name: 'Novo artefato',
       line: 'TRIAXIS PRODUCT',
-      img: 'assets/cybershape-unit.png',
+      img: 'assets/cybershape-unit.webp',
       basePrice: 0,
       description: 'Descreva o novo artefato TriAxis.',
       category: 'services',
@@ -3380,7 +3448,7 @@
       <form id="catalogAdminEditorForm" class="catalog-admin-editor-form">
         <div class="catalog-admin-editor-grid">
           <aside class="catalog-editor-media-panel">
-            <div class="catalog-editor-main-image"><img id="catalogEditorImagePreview" src="${escapeHtml(product.img)}" alt="Prévia do produto"></div>
+            <div class="catalog-editor-main-image"><img id="catalogEditorImagePreview" src="${escapeHtml(product.img)}" alt="Prévia do produto" decoding="async"></div>
             <div class="form-field"><label for="catalogEditorImagePath">IMAGEM PRINCIPAL · CAMINHO, URL OU BASE64</label><input id="catalogEditorImagePath" type="text" value="${escapeHtml(product.img)}"></div>
             <label class="btn btn-primary btn-block catalog-upload-button" for="catalogEditorMainImageInput">CARREGAR IMAGEM DO COMPUTADOR</label>
             <input id="catalogEditorMainImageInput" type="file" accept="image/*" hidden>
@@ -3484,7 +3552,7 @@
       id: previous?.id || id,
       name,
       line: catalogEditorFieldValue('catalogEditorLine'),
-      img: catalogAdminMainImageDraft || catalogEditorFieldValue('catalogEditorImagePath') || 'assets/cybershape-unit.png',
+      img: catalogAdminMainImageDraft || catalogEditorFieldValue('catalogEditorImagePath') || 'assets/cybershape-unit.webp',
       basePrice: Number(document.getElementById('catalogEditorPrice')?.value || 0),
       productionTime: catalogEditorFieldValue('catalogEditorProductionTime'),
       description: catalogEditorFieldValue('catalogEditorDescription'),
@@ -3678,10 +3746,10 @@
   function getPhysicalProductViews(product = getCatalogProduct()) {
     if (product.id === 'vector_sigil') {
       return {
-        front: 'assets/vector-sigil-front-hero.png',
+        front: 'assets/vector-sigil-front-hero.webp',
         back: 'assets/vector-sigil-back.png',
         side: 'assets/vector-sigil-side.png',
-        concept: 'assets/vector-sigil-vistas-panel.png'
+        concept: 'assets/vector-sigil-vistas-panel.webp'
       };
     }
     const gallery = Array.isArray(product.gallery) ? product.gallery.filter(Boolean) : [];
@@ -4199,6 +4267,46 @@
     return Boolean(order?.remote && ['order_received', 'awaiting_payment'].includes(order.remoteStatus));
   }
 
+  function renderPaymentReturnNotice(notice) {
+    const panel = document.getElementById('paymentReturnPanel');
+    if (!panel) return;
+    if (!notice || !['success', 'pending', 'failure'].includes(notice.status)) {
+      panel.hidden = true;
+      panel.removeAttribute('data-payment-status');
+      return;
+    }
+    const copy = {
+      success: {
+        title: 'RETORNO RECEBIDO',
+        message: 'O checkout informou aprovação. Seu pedido só será atualizado após a confirmação segura enviada pelo provedor.'
+      },
+      pending: {
+        title: 'PAGAMENTO EM PROCESSAMENTO',
+        message: 'O provedor ainda está analisando o pagamento. Você pode fechar esta tela e acompanhar o pedido pelo perfil.'
+      },
+      failure: {
+        title: 'PAGAMENTO NÃO CONCLUÍDO',
+        message: 'O checkout não concluiu o pagamento. Seu pedido continua disponível para uma nova tentativa.'
+      }
+    }[notice.status];
+    const meta = [];
+    if (notice.recordedAt) meta.push(`Retorno registrado em ${formatTime(notice.recordedAt)}`);
+    if (notice.transactionReference) {
+      meta.push(`Transação ${String(notice.transactionReference).slice(0, 8).toUpperCase()}`);
+    }
+    if (notice.paymentId) meta.push(`Referência ${notice.paymentId}`);
+    setText('paymentReturnTitle', copy.title);
+    setText('paymentReturnMessage', copy.message);
+    setText('paymentReturnMeta', meta.join(' · '));
+    panel.dataset.paymentStatus = notice.status;
+    panel.hidden = false;
+  }
+
+  function dismissPaymentReturnNotice() {
+    window.TriAxisPayments?.clearReturnNotice?.();
+    renderPaymentReturnNotice(null);
+  }
+
   async function openSecureCheckout(button, orderId) {
     if (!window.TriAxisPayments) {
       showToast('PAGAMENTO TEMPORARIAMENTE INDISPONÍVEL', 'error');
@@ -4227,7 +4335,7 @@
       container.innerHTML = `
         <div class="profile-login-required hud-frame">
           <span class="hud-corner tl"></span><span class="hud-corner br"></span>
-          <p class="eyebrow">// ACCESS REQUIRED</p>
+          <p class="eyebrow">// ACESSO NECESSÁRIO</p>
           <h2>LOGIN NECESSÁRIO</h2>
           <p>Entre com uma tag autorizada para abrir o perfil do usuário, ver dados do agente e acompanhar pedidos vinculados.</p>
           <button class="btn btn-primary" id="btnProfileOpenLogin" type="button">ABRIR LOGIN</button>
@@ -4263,7 +4371,7 @@
           <p><b>Estado</b><span>${escapeHtml(order.status || 'Pendente')} · ${escapeHtml(order.estimatedDays || order.deadline || 'prazo sob análise')}</span></p>
           <p><b>Estimativa</b><span>${formatCurrencyBRL(order.estimatedPrice || 0)}</span></p>
         </div>
-        ${canPayOrder(order) ? `<div class="profile-order-payment"><button class="btn btn-primary btn-sm" type="button" data-pay-order="${escapeHtml(order.id)}">PAGAR COM MERCADO PAGO</button><small>A confirmação ocorrerá diretamente pelo provedor.</small></div>` : ''}
+        ${canPayOrder(order) ? `<div class="profile-order-payment"><button class="btn btn-primary btn-sm" type="button" data-pay-order="${escapeHtml(order.id)}">PAGAR COM MERCADO PAGO</button><small>Você será direcionado ao ambiente seguro do Mercado Pago. A TriAxis confirma o pedido somente após a resposta do provedor.</small></div>` : ''}
         ${renderOrderHistory(order)}
       </article>`).join('') : '<div class="profile-empty-orders">Nenhum pedido vinculado a esta tag ainda.</div>';
 
@@ -4380,6 +4488,7 @@
   function restoreSidebarState() {
     let hidden = false;
     try { hidden = localStorage.getItem(SIDEBAR_STATE_KEY) === '1'; } catch (e) {}
+    if (window.matchMedia('(max-width: 620px)').matches) hidden = false;
     setSidebarHidden(hidden);
   }
 
@@ -4455,7 +4564,7 @@
     const grid = document.getElementById('labGallery');
     if (!grid) return;
     const products = sortCatalogProducts(getCatalogAdminRecords().filter(product => !product.hidden)).slice(0, 6);
-    grid.innerHTML = products.map(p => `<article class="lab-gallery-card hud-frame"><span class="hud-corner tl"></span><span class="hud-corner br"></span><img src="${escapeHtml(p.img)}" alt="${escapeHtml(p.name)}"><div><span>${escapeHtml(p.line)}</span><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p></div></article>`).join('');
+    grid.innerHTML = products.map(p => `<article class="lab-gallery-card hud-frame"><span class="hud-corner tl"></span><span class="hud-corner br"></span><img src="${escapeHtml(p.img)}" alt="${escapeHtml(p.name)}" loading="lazy" decoding="async"><div><span>${escapeHtml(p.line)}</span><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description)}</p></div></article>`).join('');
   }
 
   function getAgentOrderHistoryText(tag) {
@@ -4530,6 +4639,8 @@
     setCurrentTag(generateUniqueTag());
 
     document.querySelectorAll('.nav-item').forEach((btn) => btn.addEventListener('click', () => switchView(btn.getAttribute('data-view'))));
+    document.getElementById('btnPaymentReturnProfile')?.addEventListener('click', () => switchView('profile'));
+    document.getElementById('btnPaymentReturnDismiss')?.addEventListener('click', dismissPaymentReturnNotice);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') void refreshCatalogFromSupabase();
     });
@@ -4601,8 +4712,10 @@
     document.getElementById('physicalDisplayText')?.addEventListener('input', () => renderPhysicalKeychainPreview(findAgentByTag(currentPhysicalTag), currentPhysicalSide));
 
     document.querySelectorAll('[data-close-modal]').forEach((btn) => btn.addEventListener('click', () => closeModal(btn.getAttribute('data-close-modal'))));
-    document.querySelectorAll('.modal-overlay').forEach((overlay) => overlay.addEventListener('click', (e) => { if (e.target === overlay) closeAllModals(); }));
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllModals(); });
+    document.querySelectorAll('.modal-overlay').forEach((overlay) => overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal(overlay.id);
+    }));
+    document.addEventListener('keydown', handleModalKeydown);
 
     document.getElementById('btnFlipId').addEventListener('click', flipIdCard);
     document.getElementById('btnRequestPhysicalFromId')?.addEventListener('click', () => openPhysicalIdModal(currentIdTag));
@@ -4663,6 +4776,8 @@
     const passwordRecoveryIntent = capturePasswordRecoveryUrlIntent();
     const passwordRecoveryUrlError = consumePasswordRecoveryUrlError();
     passwordRecoveryUrlProcessing = passwordRecoveryUrlMarker;
+    const paymentReturn = window.TriAxisPayments?.consumeReturnNotice?.();
+    renderPaymentReturnNotice(paymentReturn);
     try {
       if (!window.TriAxisAuth) throw new Error('Cliente Supabase não carregado');
       await window.TriAxisAuth.initialize(applyRemoteAuthState, handleRemoteAuthEvent, {
@@ -4697,14 +4812,15 @@
       } else if (passwordRecoveryIntent) {
         if (!passwordRecoveryMode && !enterPasswordRecoveryMode(recoveredSession)) showPasswordRecoveryUrlError();
       }
-      const paymentReturn = window.TriAxisPayments?.consumeReturnNotice?.();
       if (paymentReturn) {
         const messages = {
           success: 'RETORNO RECEBIDO · CONFIRMANDO PAGAMENTO COM O PROVEDOR',
           pending: 'PAGAMENTO PENDENTE · O STATUS SERÁ ATUALIZADO PELO PROVEDOR',
           failure: 'PAGAMENTO NÃO CONCLUÍDO'
         };
-        showToast(messages[paymentReturn], paymentReturn === 'failure' ? 'error' : 'success');
+        if (paymentReturn.fresh) {
+          showToast(messages[paymentReturn.status], paymentReturn.status === 'failure' ? 'error' : 'success');
+        }
         await refreshOrdersFromSupabase();
       }
     } catch (err) {
