@@ -1235,16 +1235,6 @@
       return null;
     }
     const data = {};
-    if (targetStatus === 'payment_received') {
-      data.payment_method = prompt('Forma de pagamento:')?.trim() || '';
-      data.payment_reference = prompt('Referência única da comprovação:')?.trim() || '';
-      data.payment_payer = prompt('Nome do pagador:')?.trim() || '';
-      data.payment_amount = Number(String(prompt(`Valor comprovado (total do pedido: ${formatCurrencyBRL(request.estimatedPrice)}):`) || '').replace(',', '.'));
-      if (!data.payment_method || !data.payment_reference || !data.payment_payer || !Number.isFinite(data.payment_amount) || data.payment_amount <= 0) {
-        showToast('DADOS DA COMPROVAÇÃO INCOMPLETOS', 'error');
-        return null;
-      }
-    }
     if (targetStatus === 'approved_for_production') {
       if (!confirm('Confirma que o pagamento foi validado e existe capacidade de produção para este pedido?')) return null;
       data.capacity_confirmed = true;
@@ -1271,14 +1261,6 @@
       data.refund_recipient = prompt('Destinatário do reembolso:')?.trim() || '';
       if (!Number.isFinite(data.refund_amount) || data.refund_amount <= 0 || data.refund_amount > Number(request.estimatedPrice || 0) || !data.refund_recipient) {
         showToast('DADOS DA SOLICITAÇÃO DE REEMBOLSO INCOMPLETOS', 'error');
-        return null;
-      }
-    }
-    if (targetStatus === 'refunded') {
-      data.refund_reference = prompt('Referência única do reembolso processado:')?.trim() || '';
-      data.refund_processed_at = prompt('Data e hora do processamento em ISO:', new Date().toISOString())?.trim() || '';
-      if (!data.refund_reference || !data.refund_processed_at || Number.isNaN(Date.parse(data.refund_processed_at))) {
-        showToast('EVIDÊNCIA DO REEMBOLSO INCOMPLETA', 'error');
         return null;
       }
     }
@@ -3640,6 +3622,11 @@
       <div class="prod-stat"><span>ESTIMATIVA</span><strong>${formatCurrencyBRL(revenue)}</strong></div>`;
   }
 
+  function canViewFinancialDetails() {
+    const roles = window.TriAxisAuth?.getState?.()?.roles || [];
+    return roles.some((role) => ['admin', 'finance'].includes(role));
+  }
+
   function renderProduction() {
     const board = document.getElementById('productionBoard');
     if (!board) return;
@@ -3667,9 +3654,9 @@
           <p><b>Origem</b><span>${escapeHtml(req.origin || (req.orderCode ? 'Catálogo' : 'ID físico'))}</span></p>
           <p><b>Código</b><span>${escapeHtml(req.orderCode || req.id || '—')}</span></p>
           <p><b>Prazo</b><span>${escapeHtml(req.deadline || 'sob consulta')}</span></p>
-          ${req.paymentReference ? `<p><b>Comprovação</b><span>${escapeHtml(req.paymentReference)}</span></p>` : ''}
-          ${req.refundRecipient ? `<p><b>Reembolso</b><span>${formatCurrencyBRL(req.refundAmount)} · ${escapeHtml(req.refundRecipient)}</span></p>` : ''}
-          ${req.refundReference ? `<p><b>Ref. reembolso</b><span>${escapeHtml(req.refundReference)}</span></p>` : ''}
+          ${canViewFinancialDetails() && req.paymentReference ? `<p><b>Comprovação</b><span>${escapeHtml(req.paymentReference)}</span></p>` : ''}
+          ${canViewFinancialDetails() && req.refundRecipient ? `<p><b>Reembolso</b><span>${formatCurrencyBRL(req.refundAmount)} · ${escapeHtml(req.refundRecipient)}</span></p>` : ''}
+          ${canViewFinancialDetails() && req.refundReference ? `<p><b>Ref. reembolso</b><span>${escapeHtml(req.refundReference)}</span></p>` : ''}
           ${req.trackingCode ? `<p><b>Rastreio</b><span>${escapeHtml(req.trackingCode)}</span></p>` : ''}
         </div>
         ${renderOrderHistory(req)}
@@ -4208,6 +4195,30 @@
     return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
   }
 
+  function canPayOrder(order) {
+    return Boolean(order?.remote && ['order_received', 'awaiting_payment'].includes(order.remoteStatus));
+  }
+
+  async function openSecureCheckout(button, orderId) {
+    if (!window.TriAxisPayments) {
+      showToast('PAGAMENTO TEMPORARIAMENTE INDISPONÍVEL', 'error');
+      return;
+    }
+    const previousText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'ABRINDO CHECKOUT...';
+    try {
+      const checkoutUrl = await window.TriAxisPayments.createCheckout(orderId);
+      window.location.assign(checkoutUrl);
+    } catch (error) {
+      console.error('Falha ao iniciar checkout seguro:', error);
+      button.disabled = false;
+      button.textContent = previousText;
+      const pending = String(error?.message || '').includes('RECONCILIATION_PENDING');
+      showToast(pending ? 'PAGAMENTO EM RECONCILIAÇÃO · AGUARDE' : 'NÃO FOI POSSÍVEL ABRIR O CHECKOUT', 'error');
+    }
+  }
+
   function renderUserProfile() {
     const container = document.getElementById('profileContent');
     if (!container) return;
@@ -4252,6 +4263,7 @@
           <p><b>Estado</b><span>${escapeHtml(order.status || 'Pendente')} · ${escapeHtml(order.estimatedDays || order.deadline || 'prazo sob análise')}</span></p>
           <p><b>Estimativa</b><span>${formatCurrencyBRL(order.estimatedPrice || 0)}</span></p>
         </div>
+        ${canPayOrder(order) ? `<div class="profile-order-payment"><button class="btn btn-primary btn-sm" type="button" data-pay-order="${escapeHtml(order.id)}">PAGAR COM MERCADO PAGO</button><small>A confirmação ocorrerá diretamente pelo provedor.</small></div>` : ''}
         ${renderOrderHistory(order)}
       </article>`).join('') : '<div class="profile-empty-orders">Nenhum pedido vinculado a esta tag ainda.</div>';
 
@@ -4297,6 +4309,9 @@
 
     document.getElementById('btnProfileOpenCatalog')?.addEventListener('click', () => switchView('catalog'));
     document.getElementById('btnProfileLogout')?.addEventListener('click', () => { logoutAccess(); renderUserProfile(); });
+    container.querySelectorAll('[data-pay-order]').forEach((button) => button.addEventListener('click', () => {
+      void openSecureCheckout(button, button.getAttribute('data-pay-order'));
+    }));
   }
 
   /* ── Utilitários ──────────────────────────────────────────────────── */
@@ -4681,6 +4696,16 @@
         showPasswordRecoveryUrlError();
       } else if (passwordRecoveryIntent) {
         if (!passwordRecoveryMode && !enterPasswordRecoveryMode(recoveredSession)) showPasswordRecoveryUrlError();
+      }
+      const paymentReturn = window.TriAxisPayments?.consumeReturnNotice?.();
+      if (paymentReturn) {
+        const messages = {
+          success: 'RETORNO RECEBIDO · CONFIRMANDO PAGAMENTO COM O PROVEDOR',
+          pending: 'PAGAMENTO PENDENTE · O STATUS SERÁ ATUALIZADO PELO PROVEDOR',
+          failure: 'PAGAMENTO NÃO CONCLUÍDO'
+        };
+        showToast(messages[paymentReturn], paymentReturn === 'failure' ? 'error' : 'success');
+        await refreshOrdersFromSupabase();
       }
     } catch (err) {
       console.error('Falha ao iniciar autenticação Supabase:', err);

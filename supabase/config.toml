@@ -1,0 +1,11 @@
+[functions.create-mercadopago-preference]
+verify_jwt = true
+
+[functions.mercadopago-webhook]
+verify_jwt = false
+
+[functions.request-mercadopago-refund]
+verify_jwt = true
+
+[functions.reconcile-mercadopago-payments]
+verify_jwt = false

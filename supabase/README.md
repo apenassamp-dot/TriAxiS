@@ -121,6 +121,64 @@ expedição/entrega e solicitação/processamento do reembolso.
 Para solicitar reembolso, informe valor e destinatário. Para concluir, outro ator
 financeiro deve registrar referência única e data de processamento.
 
+## Pagamento seguro por provedor — migration 006
+
+Depois da migration 005, execute
+`migrations/006_payment_provider_security.sql` somente no projeto QA.
+
+A migration 006 substitui a comprovação manual por um ledger do Mercado Pago,
+bloqueia a conclusão manual de pagamento/reembolso e restringe os campos
+financeiros legados. O retorno do navegador é apenas informativo: somente um
+webhook assinado, seguido de consulta à API do Mercado Pago, pode atualizar o
+pedido para `payment_received`.
+
+As Edge Functions ficam em `supabase/functions/`:
+
+- `create-mercadopago-preference`: checkout autenticado e preço autoritativo;
+- `mercadopago-webhook`: assinatura, anti-replay e reconsulta do pagamento;
+- `request-mercadopago-refund`: reembolso com AAL2 e maker-checker;
+- `reconcile-mercadopago-payments`: reconciliação interna.
+
+Configure os segredos no Supabase, nunca em arquivos versionados:
+
+```text
+MP_ACCESS_TOKEN=<credencial de teste>
+MP_WEBHOOK_SECRET=<segredo do webhook de teste>
+MP_COLLECTOR_ID=<id da conta de teste recebedora>
+PAYMENTS_ENVIRONMENT=test
+PAYMENTS_PRODUCTION_ENABLED=false
+PAYMENTS_ALLOWED_ORIGINS=https://apenassamp-dot.github.io
+PUBLIC_SITE_URL=https://apenassamp-dot.github.io/TriAxiS
+PAYMENTS_REQUIRE_AAL2=true
+PAYMENTS_RECONCILIATION_SECRET=<segredo aleatório forte>
+```
+
+No painel do Mercado Pago de teste, aponte notificações para:
+
+```text
+https://<project-ref>.supabase.co/functions/v1/mercadopago-webhook?source_news=webhooks
+```
+
+Depois da 006, aplique também as migrations 007 e 008. A 007 atualiza os
+hosts oficiais de checkout do Mercado Pago Brasil; a 008 separa a intenção
+idempotente do cliente da chave de cada tentativa enviada ao provedor.
+
+Antes de qualquer credencial real:
+
+1. rode `tests/006_payment_security_harness.sql` no QA;
+2. rode também `tests/008_payment_retry_harness.sql` no QA;
+3. rode `deno test supabase/functions/tests/*.test.ts`;
+4. valide pagamento aprovado, pendente, rejeitado, duplicado e fora de ordem;
+5. valide reembolso com dois atores financeiros e MFA/AAL2;
+6. configure reconciliação periódica e alertas;
+7. faça nova revisão Atlas + Janus;
+8. somente com GO explícito altere `PAYMENTS_ENVIRONMENT=production`,
+   `PAYMENTS_PRODUCTION_ENABLED=true` e use credenciais de produção.
+
+Não aplique a migration 006 em produção antes de as Edge Functions estarem
+publicadas e os testes de QA passarem. O harness 004/005 testa o protocolo anterior
+e não deve ser usado para autorizar comprovação manual depois da migration 006.
+
 ### Rollback da 004
 
 Em caso de reversão, faça backup, execute

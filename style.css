@@ -5794,3 +5794,14 @@ body[data-mode="client"] .catalog-admin-only{ display:none!important; }
   .catalog-admin-editor-footer{ flex-direction:column; }
   .catalog-admin-editor-footer .btn{ width:100%; justify-content:center; }
 }
+.profile-order-payment {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.profile-order-payment small {
+  color: var(--text-muted);
+}
